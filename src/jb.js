@@ -145,6 +145,7 @@ jb.bCursorOn = false;
 jb.blinkTimer = 0;
 jb.blinkClock = 0;
 jb.cellSize = {width: 0, height: 0};
+jb.globalScale = 1;
 
 jb.create = function() {
     jb.canvas = document.createElement('canvas');
@@ -164,7 +165,7 @@ jb.clearBlink = function() {
     jb.ctxt.fillStyle = jb.backColor;
     x = jb.xFromCol(jb.col);
     y = jb.yFromRow(jb.row);
-    jb.ctxt.fillRect(x, y, jb.cellSize.width, jb.cellSize.height);
+    jb.ctxt.fillRect(x, y, jb.cellSize.width + 1, jb.cellSize.height + 1);
     jb.resetBlink();
 };
 jb.blink = function() {
@@ -190,6 +191,17 @@ jb.blink = function() {
     x = jb.xFromCol(jb.col);
     y = jb.yFromRow(jb.row);
     jb.ctxt.fillRect(x, y, jb.cellSize.width, jb.cellSize.height);
+};
+jb.clearLine = function(row) {
+    var x, y;
+
+    if (row >= 1 && row <= jb.rows) {
+        row = row - 1;
+        jb.ctxt.fillStyle = jb.backColor;
+        x = jb.xFromCol(0);
+        y = jb.yFromRow(row);
+        jb.ctxt.fillRect(x, y, jb.canvas.width, jb.cellSize.height * jb.rows);
+    }
 };
 jb.xFromCol = function(col) {
     return col * jb.cellSize.width;
@@ -218,9 +230,11 @@ jb.resizeFont = function() {
     jb.ctxt.textBaseline = "top";
     jb.fontInfo = "" + jb.fontSize + "px Courier";
     jb.ctxt.font = jb.fontInfo;
+
+
     jb.rows = Math.floor(jb.canvas.height / jb.fontSize);
-    jb.cellSize.width = Math.round(jb.fontSize * jb.COL_TO_CHAR_SPACING);
-    jb.cellSize.height = Math.round(jb.fontSize);
+    jb.cellSize.width = jb.ctxt.measureText("W").width;
+    jb.cellSize.height = Math.floor(jb.fontSize) + 1;
 };
 jb.clear = function() {
     if (jb.backColor) {
@@ -280,7 +294,7 @@ jb.printAt = function(text, newRow, newCol) {
     }
 };
 
-// Keys ////////////////////////////////////////////////////////////////////////
+// Input ///////////////////////////////////////////////////////////////////////
 jb.normal = {last: null, down:{}};
 jb.special = {last: null, down: {}};
 jb.lastCode = -1;
@@ -293,6 +307,7 @@ jb.INPUT_STATES = {NONE: 0,
                      READ_LINE: 1,
                      READ_KEY: 2};
 jb.inputState = jb.INPUT_STATES.NONE;
+jb.DOUBLE_TAP_INTERVAL = 333; // Milliseconds
 
 jb.readLine = function() {
     var retVal = "";
@@ -474,9 +489,140 @@ jb.codes = {
   46: "delete",
 };
 
+getMouseX = function(e) {
+    return Math.round((e.srcElement ? e.pageX - e.srcElement.offsetLeft : (e.target ? e.pageX - e.target.offsetLeft : e.pageX)) / jb.globalScale);
+};
+
+getMouseY = function(e) {
+    return Math.round((e.srcElement ? e.pageY - e.srcElement.offsetTop : (e.target ? e.pageY - e.target.offsetTop : e.pageY)) / jb.globalScale);
+};
+
+getClientPos = function(touch) {
+    // Adapted from gregers' response in StackOverflow:
+    // http://stackoverflow.com/questions/5885808/includes-touch-events-clientx-y-scrolling-or-not
+
+    var winOffsetX = window.pageXoffset;
+    var winOffsetY = window.pageYoffset;
+    var x = touch.clientX;
+    var y = touch.clientY;
+
+    if (touch.pageY === 0 && Math.floor(y) > Math.floor(touch.pageY) ||
+        touch.pageX === 0 && Math.floor(x) > Math.floor(touch.pageX)) {
+      x = x - winOffsetX;
+      y = y - winOffsetY;
+    }
+    else if (y < (touch.pageY - winOffsetY) || x < (touch.pageX - winOffsetX)) {
+      x = touch.pageX - winOffsetX;
+      y = touch.pageY - winOffsetY;
+    }
+
+    glob.TouchToMouse.pointInfo.clientX = x;
+    glob.TouchToMouse.pointInfo.clientY = y;
+    glob.TouchToMouse.pointInfo.srcElement = document._gameCanvas ? document._gameCanvas : null;
+};
+
+jb.tap = {bListening: false, x: -1, y: -1, done: false, isDoubleTap: false, lastTapTime: 0};
+jb.swipe = {bListening: false, startX: -1, startY: -1, endX: -1, endY: -1, startTime: 0, endTime: 0, done: false};
+
+jb.listenForTap = function() {
+    jb.resetTap();
+    jb.tap.bListening = true;
+};
+
+jb.resetTap = function() {
+    jb.tap.x = -1;
+    jb.tap.y = -1;
+    jb.tap.done = false;
+    jb.tap.isDoubleTap = false;
+    jb.tap.lastTapTime = -1;
+    jb.tap.bListening = false;
+};
+
+jb.listenForSwipe = function() {
+    jb.resetSwipe();
+    jb.swipe.bListening = true;
+};
+
+jb.resetSwipe = function() {
+    jb.swipe.startX = -1;
+    jb.swipe.startY = -1;
+    jb.swipe.endX = -1;
+    jb.swipe.endY = -1;
+    jb.swipe.startTime = 0;
+    jb.swipe.endTime = 0;
+    jb.swipe.done = false;
+    jb.swipe.bListening = false;
+};
+
+jb.doubleTapTimedOut = function() {
+    return Date.now() - jb.tap.lastTapTime >= jb.DOUBLE_TAP_INTERVAL;
+};
+
+jb.mouseDown = function(e) {
+    var newNow = Date.now(),
+    x = getMouseX(e),
+    y = getMouseY(e);
+    
+    window.addEventListener("mousemove", jb.mouseDrag, true);
+
+    if (jb.tap.bListening) {
+        jb.tap.x = x;
+        jb.tap.y = y;
+        jb.tap.isDoubleTap = newNow - jb.tap.lastTapTime < jb.DOUBLE_TAP_INTERVAL;
+        jb.tap.lastTapTime = newNow;
+        jb.tap.done = true;
+    }
+
+    if (jb.swipe.bListening) {
+        jb.swipe.startX = x;
+        jb.swipe.startY = y;
+        jb.swipe.endX = x;
+        jb.swipe.endY = y;
+        jb.swipe.startTime = newNow;
+        jb.swipe.done = false;
+    }
+};
+
+jb.mouseDrag = function(e) {
+    if (jb.swipe.startTime) {
+        jb.swipe.endX = getMouseX(e);
+        jb.swipe.endY = getMouseY(e);
+    }
+};
+
+jb.mouseUp = function(e) {
+    window.removeEventListener("mousemove", jb.mouseDrag, true);
+
+    if (jb.swipe.startTime) {
+        jb.swipe.endX = getMouseX(e);
+        jb.swipe.endY = getMouseY(e);
+        jb.swipe.endTime = Date.now();
+        jb.swipe.done = true;
+    }
+};
+
+jb.touchStart = function(e) {
+
+};
+
+jb.touchMove = function(e) {
+
+};
+
+jb.touchEnd = function(e) {
+
+};
+
 document.addEventListener("keydown", jb.onDown, true);
 document.addEventListener("keyup", jb.onUp, true);
 document.addEventListener("keypress", jb.onPress, true);
+
+window.addEventListener("mousedown", jb.mouseDown, true);
+window.addEventListener("mouseup", jb.mouseUp, true);
+
+window.addEventListener("touchstart", jb.touchStart, true);
+window.addEventListener("touchmove", jb.touchMove, true);
+window.addEventListener("touchend", jb.touchEnd, true);
 
 // RequestAnimFrame ////////////////////////////////////////////////////////////
 // http://paulirish.com/2011/requestanimationframe-for-smart-animating/

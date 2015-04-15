@@ -10,6 +10,8 @@ game = {
     secondCard: 0,
     gameOver: false,
 
+    MAX_BET: 500,
+
     // Functions ///////////////////////////////////////////////////////////////
     intro: function() {
         // Print the title info.
@@ -47,13 +49,32 @@ game = {
         jb.print(this.cardNames[this.firstCard] + "`");
         jb.print(this.cardNames[this.secondCard] + "`");
 
-        jb.print("What is your bet? ");
+        jb.print(">> Swipe to bet <<`");
+        jb.print("`");
+
+        jb.listenForSwipe();
     },
 
-    waitForInput_loop: function() {
-        this.bet = jb.readLine();
+    // waitForInput_loop: function() {
+    //     this.bet = jb.readLine();
 
-        return this.bet === null;
+    //     return this.bet === null;
+    // },
+
+    waitForBet_loop: function() {
+        if (jb.swipe.startTime > 0) {
+            this.bet = Math.abs(jb.swipe.endX - jb.swipe.startX) / jb.canvas.width * this.MAX_BET;
+        }
+        else {
+            this.bet = 0;
+        }
+
+        this.bet = 10 * Math.round(this.bet / 10);
+
+        jb.clearLine(jb.row);
+        jb.printAt("Your bet " + this.bet, jb.row + 1, 1);
+
+        return !jb.swipe.done;
     },
 
     processBet: function() {
@@ -102,14 +123,26 @@ game = {
             }
         }
 
-        jb.print("<Hit a key to continue>");
+        if (this.gameOver) {
+            jb.print("<Tap to end>");
+        }
+        else {
+            jb.print("<Tap to continue>");
+        }
+        jb.listenForTap();
     },
 
-    waitForKeyPress_loop: function() {
-        return jb.readKey() === null;
+    // waitForKeyPress_loop: function() {
+    //     return jb.readKey() === null;
+    // },
+
+    waitForTap_loop: function() {
+        return !jb.tap.done;
     },
 
     nextTurnOrEnd: function() {
+        jb.resetTap();
+
         if (this.gameOver) {
             jb.end();
         }
