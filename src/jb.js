@@ -560,11 +560,30 @@ jb.doubleTapTimedOut = function() {
 };
 
 jb.mouseDown = function(e) {
-    var newNow = Date.now(),
-    x = jb.getMouseX(e),
-    y = jb.getMouseY(e);
-    
+    jb.pointInfo.x = jb.getMouseX(e);
+    jb.pointInfo.y = jb.getMouseY(e);
     window.addEventListener("mousemove", jb.mouseDrag, true);
+    jb.gestureStart();
+};
+
+jb.mouseDrag = function(e) {
+    jb.pointInfo.x = jb.getMouseX(e);
+    jb.pointInfo.y = jb.getMouseY(e);
+    jb.gestureContinue();
+};
+
+jb.mouseUp = function(e) {
+    window.removeEventListener("mousemove", jb.mouseDrag, true);
+    jb.pointInfo.x = jb.getMouseX(e);
+    jb.pointInfo.y = jb.getMouseY(e);
+    jb.gestureEnd();
+};
+
+jb.gestureStart = function() {
+    var newNow = Date.now(),
+    x = jb.pointInfo.x
+    y = jb.pointInfo.y;
+    
 
     if (jb.tap.bListening) {
         jb.tap.x = x;
@@ -584,19 +603,17 @@ jb.mouseDown = function(e) {
     }
 };
 
-jb.mouseDrag = function(e) {
+jb.gestureContinue = function() {
     if (jb.swipe.startTime) {
-        jb.swipe.endX = jb.getMouseX(e);
-        jb.swipe.endY = jb.getMouseY(e);
+        jb.swipe.endX = jb.pointInfo.x;
+        jb.swipe.endY = jb.pointInfo.y;
     }
 };
 
-jb.mouseUp = function(e) {
-    window.removeEventListener("mousemove", jb.mouseDrag, true);
-
+jb.gestureEnd = function() {
     if (jb.swipe.startTime) {
-        jb.swipe.endX = jb.getMouseX(e);
-        jb.swipe.endY = jb.getMouseY(e);
+        jb.swipe.endX = jb.pointInfo.x
+        jb.swipe.endY = jb.pointInfo.y;
         jb.swipe.endTime = Date.now();
         jb.swipe.done = true;
     }
@@ -609,7 +626,7 @@ jb.touchStart = function(e) {
       
         if (e.touches.length === 1) {
             jb.getClientPos(e.touches[0]);
-            jb.mouseDown(jb.pointInfo);
+            jb.gestureStart();
         }
     }
 },
@@ -621,7 +638,7 @@ jb.touchMove = function(e) {
       
         if (e.touches.length === 1) {
             jb.getClientPos(e.touches[0]);
-            jb.mouseDrag(jb.pointInfo);
+            jb.gestureContinue();
         }
     }
 },
@@ -632,7 +649,7 @@ jb.touchEnd = function(e) {
         e.stopPropagation();
     }
     
-    jb.mouseUp(jb.pointInfo);
+    jb.gestureEnd();
 },
 
 document.addEventListener("keydown", jb.onDown, true);
