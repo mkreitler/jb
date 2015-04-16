@@ -308,6 +308,7 @@ jb.INPUT_STATES = {NONE: 0,
                      READ_KEY: 2};
 jb.inputState = jb.INPUT_STATES.NONE;
 jb.DOUBLE_TAP_INTERVAL = 333; // Milliseconds
+jb.pointInfo = {clientX:0, clientY:0, srcElement:null};
 
 jb.readLine = function() {
     var retVal = "";
@@ -489,15 +490,15 @@ jb.codes = {
   46: "delete",
 };
 
-getMouseX = function(e) {
+jb.getMouseX = function(e) {
     return Math.round((e.srcElement ? e.pageX - e.srcElement.offsetLeft : (e.target ? e.pageX - e.target.offsetLeft : e.pageX)) / jb.globalScale);
 };
 
-getMouseY = function(e) {
+jb.getMouseY = function(e) {
     return Math.round((e.srcElement ? e.pageY - e.srcElement.offsetTop : (e.target ? e.pageY - e.target.offsetTop : e.pageY)) / jb.globalScale);
 };
 
-getClientPos = function(touch) {
+jb.getClientPos = function(touch) {
     // Adapted from gregers' response in StackOverflow:
     // http://stackoverflow.com/questions/5885808/includes-touch-events-clientx-y-scrolling-or-not
 
@@ -516,9 +517,9 @@ getClientPos = function(touch) {
       y = touch.pageY - winOffsetY;
     }
 
-    glob.TouchToMouse.pointInfo.clientX = x;
-    glob.TouchToMouse.pointInfo.clientY = y;
-    glob.TouchToMouse.pointInfo.srcElement = document._gameCanvas ? document._gameCanvas : null;
+    jb.pointInfo.clientX = x;
+    jb.pointInfo.clientY = y;
+    jb.pointInfo.srcElement = jb.canvas ? jb.canvas : null;
 };
 
 jb.tap = {bListening: false, x: -1, y: -1, done: false, isDoubleTap: false, lastTapTime: 0};
@@ -560,8 +561,8 @@ jb.doubleTapTimedOut = function() {
 
 jb.mouseDown = function(e) {
     var newNow = Date.now(),
-    x = getMouseX(e),
-    y = getMouseY(e);
+    x = jb.getMouseX(e),
+    y = jb.getMouseY(e);
     
     window.addEventListener("mousemove", jb.mouseDrag, true);
 
@@ -585,8 +586,8 @@ jb.mouseDown = function(e) {
 
 jb.mouseDrag = function(e) {
     if (jb.swipe.startTime) {
-        jb.swipe.endX = getMouseX(e);
-        jb.swipe.endY = getMouseY(e);
+        jb.swipe.endX = jb.getMouseX(e);
+        jb.swipe.endY = jb.getMouseY(e);
     }
 };
 
@@ -594,24 +595,45 @@ jb.mouseUp = function(e) {
     window.removeEventListener("mousemove", jb.mouseDrag, true);
 
     if (jb.swipe.startTime) {
-        jb.swipe.endX = getMouseX(e);
-        jb.swipe.endY = getMouseY(e);
+        jb.swipe.endX = jb.getMouseX(e);
+        jb.swipe.endY = jb.getMouseY(e);
         jb.swipe.endTime = Date.now();
         jb.swipe.done = true;
     }
 };
 
 jb.touchStart = function(e) {
-
-};
-
+    if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+      
+        if (e.touches.length === 1) {
+            jb.getClientPos(e.touches[0]);
+            jb.mouseDown(jb.pointInfo);
+        }
+    }
+},
+  
 jb.touchMove = function(e) {
-
-};
-
+    if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+      
+        if (e.touches.length === 1) {
+            jb.getClientPos(e.touches[0]);
+            jb.mouseDrag(jb.pointInfo);
+        }
+    }
+},
+  
 jb.touchEnd = function(e) {
-
-};
+    if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
+    
+    jb.mouseUp(jb.pointInfo);
+},
 
 document.addEventListener("keydown", jb.onDown, true);
 document.addEventListener("keyup", jb.onUp, true);
