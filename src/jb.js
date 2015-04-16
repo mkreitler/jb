@@ -308,7 +308,7 @@ jb.INPUT_STATES = {NONE: 0,
                      READ_KEY: 2};
 jb.inputState = jb.INPUT_STATES.NONE;
 jb.DOUBLE_TAP_INTERVAL = 333; // Milliseconds
-jb.pointInfo = {clientX:0, clientY:0, srcElement:null};
+jb.pointInfo = {x:0, y:0, srcElement:null};
 
 jb.readLine = function() {
     var retVal = "";
@@ -517,8 +517,8 @@ jb.getClientPos = function(touch) {
       y = touch.pageY - winOffsetY;
     }
 
-    jb.pointInfo.clientX = x;
-    jb.pointInfo.clientY = y;
+    jb.pointInfo.x = x;
+    jb.pointInfo.y = y;
     jb.pointInfo.srcElement = jb.canvas ? jb.canvas : null;
 };
 
