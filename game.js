@@ -153,5 +153,8 @@ game = {
     },
 };
 
-// Star the game!
-jb.run(game);
+
+// Start the game!
+window.onload = function() {
+    jb.run(game);
+};
