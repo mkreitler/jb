@@ -9,6 +9,7 @@ game = {
     firstCard: 0,
     secondCard: 0,
     gameOver: false,
+    zeroBetLoss: 50,
 
     MAX_BET: 500,
 
@@ -19,7 +20,7 @@ game = {
         jb.printAt("Based on Bill Pambley's BASIC Game`", 2, 19);
 
         // Move down 3 rows.
-        jb.cursorMove(3, 0);
+        jb.cursorMove(1, 0);
 
         // Print instructions.
         jb.print("Acey-ducey is played in the following manner:`");
@@ -27,7 +28,8 @@ game = {
         jb.print("You have the option to bet or not bet, depending`");
         jb.print("on whether or not you feel the card will have a`");
         jb.print("value between the first two.`");
-        jb.print("If you do not want to bet, input a 0.`");
+        jb.print("If you do not want to bet, input a 0. If you bet`");
+        jb.print("0 and a winning card appears, you will lose $" + this.zeroBetLoss + ".`");
         jb.print("`");
 
         this.playerCash = 100;
@@ -35,9 +37,7 @@ game = {
     },
 
     showTurnInfo: function() {
-        jb.print("You now have ");
-        jb.print("" + this.playerCash);
-        jb.print(" " + "dollars.`");
+        jb.print("You now have " + this.playerCash + " dollars.`");
         jb.print("`");
         jb.print("Here are your next two cards:`");
 
@@ -86,9 +86,6 @@ game = {
         if (this.bet > this.playerCash) {
             jb.print("Sorry, my friend, but you don't have that much.`");
         }
-        else if (this.bet === 0) {
-            jb.print("Chicken!!`");
-        }
         else {
             // Draw the next card.
             var nextCard = Math.floor(Math.random() * 13);
@@ -107,19 +104,28 @@ game = {
 
             jb.print("The new card is " + this.cardNames[nextCard] + ".`");
 
-            if (playerWon) {
+            if (playerWon && this.bet > 0) {
                 jb.print("Nice guess! You won this time!`");
                 this.playerCash += this.bet;
             }
+            else if (playerWon && this.bet === 0) {
+                jb.print("You chickened out but a winning card appeared -- you lose $" + this.zeroBetLoss + "!`");
+                this.playerCash -= this.zeroBetLoss;
+            }
             else {
-                jb.print("Too bad -- you lost!`");
-                this.playerCash -= this.bet;
-
-                if (this.playerCash <= 0) {
-                    jb.cursorMove(1, 0);
-                    jb.print("You shot your wad. Game over!`");
-                    this.gameOver = true;
+                if (this.bet === 0) {
+                    jb.print("Good thing you bet 0!`");
                 }
+                else {
+                    jb.print("Too bad -- you lost!`");
+                }
+                this.playerCash -= this.bet;
+            }
+            
+            if (this.playerCash <= 0) {
+                jb.cursorMove(1, 0);
+                jb.print("You shot your wad. Game over!`");
+                this.gameOver = true;
             }
         }
 
