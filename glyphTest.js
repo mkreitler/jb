@@ -6,6 +6,8 @@ game = {
 
     // Functions ///////////////////////////////////////////////////////////////
     test: function() {
+        var testSound = jb.sound.makeTestSound();
+
         jb.setBackColor("rgba(64, 32, 0, 1)");
         jb.clear();
         jb.glyphs.draw("16x16", "tree01", 150, 118, 4, 4);
@@ -38,7 +40,10 @@ game = {
         jb.glyphs.draw("16x16", "brickWedgeBottomLeft", 364, 296, 2, 2);
         jb.glyphs.draw("16x16", "brickWedgeBottomRight", 396, 296   , 2, 2);
 
-        jb.fonts.printAt("fantasy", 1, 1, "AAA", "red");
+        jb.fonts.printAt("fantasy", 1, 40, "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789,.!?'", "red", 0.5, 0, 1);
+        jb.fonts.printAt("fantasy", 2, 40, "I CAN'T EAT 200 FISH!", "yellow", 0.5, 0, 1);
+
+        testSound.play();
     }
 };
 
