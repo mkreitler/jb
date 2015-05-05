@@ -1,7 +1,7 @@
 // Acey-ducey card game
 
 // Create an object that will be the game:
-game = {
+jb.program = {
     // Variables and data //////////////////////////////////////////////////////
     BACK_COLOR: "rgba(0, 32, 128, 1)",
     SKY_COLOR: "rgba(64, 128, 255, 1)",
@@ -26,6 +26,7 @@ game = {
     WINNING_SCORE: 3,
     SUB_REVEAL_TIME: 1,
     SUB_SURFACE_HEIGHT: 20,
+    ALARM_REPLAY_FACTOR: 2.67,
 
     message: null,
     messageRGB: "0, 0, 0",
@@ -34,8 +35,12 @@ game = {
     laneHeight: 0,
     destroyer: {lane: -1, state: 0, target: -1, score: 0},
     sub: {lane: -1, state: 0, hidingSpots: [], targetLanes: [], score: 0},
-    missile: {x: 0, y: 0, animFrames: ["missile01up", "missile01up2"], frame: 0, targetY: 0, targetLane: 0, scale_x: 1, scale_y: 2},
-    torpedo: {x: 0, y: 0, dirX: 0, dirY: 0, glyph: "torpedoLeft", targetX: 0, targetY: 0, targetLane: 0, scale_x: 2, scale_y: 1},
+    missile: {x: 0, y: 0, animFrames: ["missile01up", "missile01up2"], frame: 0, targetY: 0, targetLane: 0, scale_x: 1, scale_y: 2, sound: null},
+    torpedo: {x: 0, y: 0, dirX: 0, dirY: 0, glyph: "torpedoLeft", targetX: 0, targetY: 0, targetLane: 0, scale_x: 2, scale_y: 1, sound: null},
+    hitSound: jb.sound.makeSound("pinkNoise", 0.5, 0.5, 50, 100),
+    missSound: jb.sound.makeSound("sine", 0.2, 0.5, 30, 600),
+    alarmSound: jb.sound.makeSound("saw", 0.5, 0.5, 50, 200),
+    tapSound: jb.sound.makeSound("square", 0.05, 0.1, 600, 600),
 
     // DEBUG:
     fps: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -45,10 +50,13 @@ game = {
     setUp: function() {
 
         // Compute constants used to draw the shipping lanes.
-        this.yTop = Math.round(jb.canvas.height * game.SKY_HEIGHT);
-        this.laneHeight = Math.round((jb.canvas.height - this.yTop) / game.NUM_LANES);
+        this.yTop = Math.round(jb.canvas.height * this.SKY_HEIGHT);
+        this.laneHeight = Math.round((jb.canvas.height - this.yTop) / this.NUM_LANES);
 
         jb.resize(jb.canvas.width, this.yTop + this.NUM_LANES * this.laneHeight);
+
+        this.missile.sound = jb.sound.makeSound("noise", 4, 0.1);
+        this.torpedo.sound = jb.sound.makeSound("pinkNoise", 5, 0.1, 80, 120);
     },
 
     startGame: function() {
@@ -58,18 +66,8 @@ game = {
             cloudGlyph = null,
             newCloud = null;
 
-        jb.setBackColor(game.BACK_COLOR);
+        jb.setBackColor(this.BACK_COLOR);
         jb.clear();
-
-        this.message = null;
-        this.banner = null;
-        this.destroyer.score = 0;
-        this.destroyer.state = this.STATE.OK;
-
-        this.sub.score = 0;
-        this.sub.state = this.STATE.OK;
-        this.sub.hidingSpots.length = 0;
-        this.sub.targetLanes.length = 0;
 
         // Randomly position some clouds (but don't draw them, yet!).
         for (iCloud = 0; iCloud < this.MAX_CLOUDS; ++iCloud) {
@@ -82,16 +80,22 @@ game = {
             newCloud = {glyph: null, xScale: scale, yScale: scale - Math.round(Math.random()), x: 0, y: 0};
             newCloud.glyph = Math.random() < 0.5 ? "cloud01" : "cloud02";
             newCloud.x = Math.floor(Math.random() * (jb.canvas.width - 16 * newCloud.xScale));
-            newCloud.y = Math.floor(Math.random() * (jb.canvas.height * game.SKY_HEIGHT - 16 * newCloud.yScale));
+            newCloud.y = Math.floor(Math.random() * (jb.canvas.height * this.SKY_HEIGHT - 16 * newCloud.yScale));
 
             // Add this cloud to the list.
             this.clouds.push(newCloud);
         }
+
+        this.sub.score = 0;
+        this.destroyer.score = 0;
     },
 
     instructions: function() {
+        this.message = null;
+        this.banner = null;
+
         jb.fonts.printAt("military", 1, 40, "***Sub Shot***", "yellow", 0.5, 0.0, 4);
-        jb.fonts.printAt("military", 4, 40, "Sink the enemy sub before it sinks you!`", "gray", 0.5, 0.0, 2);
+        jb.fonts.printAt("military", 4, 40, "Sink the enemy sub!`", "gray", 0.5, 0.0, 2);
         jb.fonts.printAt("military", 6, 40, "Place your destroyer in one of the shipping lanes.`", "gray", 0.5, 0.0, 1);
         jb.fonts.printAt("military", 7, 40, "Then, tap a lane to launch an anti-submarine missile.`", "gray", 0.5, 0.0, 1);
         jb.fonts.printAt("military", 8, 40, "After each launch, the sub will surface and fire a torpedo.`", "gray", 0.5, 0.0, 1);
@@ -100,22 +104,31 @@ game = {
         jb.fonts.printAt("military", 11, 40, "from which it has already fired.`", "gray", 0.5, 0.0, 1);
         jb.fonts.printAt("military", 13, 40, "<TAP> to start!", "gray", 0.5, 0.0, 2);
 
+        jb.startTimer("alarm");
+        this.alarmSound.play();
+
         jb.listenForTap();
     },
 
-    waitForStartTap_loop: function() {
-        var bDone = jb.tap.done;
+    do_waitForStartTap: function() {
+        if (jb.timer("alarm") > this.alarmSound.duration * this.ALARM_REPLAY_FACTOR &&
+            jb.timerLast("alarm") <= this.alarmSound.duration * this.ALARM_REPLAY_FACTOR) {
+            this.alarmSound.play();
+        }
 
-        return !bDone;
+        jb.until(jb.tap.done);
     },
 
     setupPlaceDestroyer: function() {
         this.messageRGB = "0, 0, 0";
         this.message = "<TAP> a blue lane to place your ship.";
         jb.listenForTap();
+        this.tapSound.play();
+
+        this.destroyer.state = this.STATE.OK;
     },
 
-    placeDestroyer_loop: function() {
+    do_placeDestroyer: function() {
         var lane = this.laneFromTap();
 
         this.drawBoard();
@@ -125,16 +138,20 @@ game = {
             this.destroyer.state = this.STATE.OK;
         }
 
-        return lane < 0;
+        jb.until(lane >= 0);
     },
 
     setupHideSub: function() {
         jb.startTimer("hideSub");
+
+        this.tapSound.play();
+        this.sub.state = this.STATE.OK;
+        this.sub.hidingSpots.length = 0;
+        this.sub.targetLanes.length = 0;
     },
 
-    hideSub_loop: function() {
-        var timePassed = jb.timer("hideSub"),
-            bContinueLoop = true;
+    do_hideSub: function() {
+        var timePassed = jb.timer("hideSub");
 
         this.message = "New sub arrives!";
 
@@ -151,14 +168,10 @@ game = {
             this.messageRGB = "255, 0, 0";
         }
 
-        if (jb.timer("hideSub") > this.HIDE_SUB_TIME) {
-            bContinueLoop = false;
-        }
-
         this.drawBoard();
         this.drawDestroyer();
 
-        return bContinueLoop;
+        jb.until(jb.timer("hideSub") > this.HIDE_SUB_TIME);
     },
 
     setupPlayerShot: function() {
@@ -171,7 +184,7 @@ game = {
         jb.listenForTap();
     },
 
-    waitForPlayerShot_loop: function() {
+    do_waitForPlayerShot: function() {
         var lane = this.laneFromTap();
 
         if (lane >= 0) {
@@ -189,10 +202,14 @@ game = {
         this.drawBoard();
         this.drawDestroyer();
 
-        return lane < 0;
+        jb.until(lane >= 0);
     },
 
-    missileUp_loop: function() {
+    fireMissile: function() {
+        this.missile.sound.play();
+    },
+
+    do_missileUp: function() {
         var missileOnScreen = this.missile.y > -8 * this.missile.scale_y;
 
         this.missile.y -= Math.round(this.MISSILE_SPEED * jb.time.deltaTime);
@@ -215,10 +232,10 @@ game = {
             jb.startTimer("missileFlame");
         }
 
-        return missileOnScreen;
+        jb.while(missileOnScreen);
     },
 
-    missileDown_loop: function() {
+    do_missileDown: function() {
         var missileAtTarget = this.missile.y > this.missile.targetY;
 
         this.missile.y += Math.round(this.MISSILE_SPEED * jb.time.deltaTime);
@@ -234,17 +251,20 @@ game = {
         this.drawMissile();
         this.drawDestroyer();
 
-        return !missileAtTarget;
+        jb.until(missileAtTarget);
     },
 
-    setMissileSplashdown: function() {
+    setupMissileSplashdown: function() {
         // Force the missile to end in exactly the right place.
         this.missile.y = this.yForLane(this.missile.targetLane) + Math.round(this.laneHeight * 0.5);
+        this.missile.sound.stop();
+
+        this.missSound.play();
 
         jb.startTimer("ripples");
     },
 
-    missilesSplashdown_loop: function() {
+    do_missileSplashdownLoop: function() {
         var i = 0,
             rippleAlpha = 0,
             radX = 0;
@@ -290,14 +310,14 @@ game = {
             }
         }
 
-        return jb.timer("ripples") < this.RIPPLE_TIME;
+        jb.until(jb.timer("ripples") >= this.RIPPLE_TIME);
     },
 
     setupSubSurface: function() {
         jb.startTimer("subSurface");
     },
 
-    subSurface_loop: function() {
+    do_subSurface: function() {
         var cloakParam = 0;
 
         cloakParam = Math.min(1.0, jb.timer("subSurface") / this.SUB_REVEAL_TIME);
@@ -306,7 +326,7 @@ game = {
         this.drawDestroyer();
         this.drawTransitioningSub(cloakParam);
 
-        return cloakParam < 1.0;
+        jb.while(cloakParam < 1.0);
     },
 
     setupSubFires: function() {
@@ -324,10 +344,12 @@ game = {
         this.torpedo.dirX /= len;
         this.torpedo.dirY /= len;
 
+        this.torpedo.sound.play();
+
         jb.startTimer("subSurface");
     },
 
-    subFires_Loop: function() {
+    do_subFires: function() {
         var cloakParam = 0,
             dx = 0,
             dy = 0,
@@ -354,21 +376,24 @@ game = {
 
         this.drawTransitioningSub(cloakParam);
 
-        return dx * this.torpedo.dirX + dy * this.torpedo.dirY > 0;
+        jb.while(dx * this.torpedo.dirX + dy * this.torpedo.dirY > 0);
     },
 
     checkTorpedoHitsPlayer: function() {
+        this.torpedo.sound.stop();
+
         if (this.torpedo.targetLane !== this.destroyer.lane) {
             jb.goto("setupPlayerShot");
         }
     },
 
-    setupHitDestroyer_loop: function() {
+    setupHitDestroyer: function() {
         jb.startTimer("explosion");
         jb.startTimer("subSurface");
+        this.hitSound.play();
     },
 
-    hitDestroyer_loop: function() {
+    do_hitDestroyer: function() {
         // Fireball.
         var x = Math.round(this.torpedo.x + 16 * this.SHIP.SCALE_X * 0.5),
             y = Math.round(this.torpedo.y + 8 * this.SHIP.SCALE_Y * 0.5);
@@ -380,7 +405,7 @@ game = {
         this.drawDestroyer();
         jb.ctxt.globalAlpha = 1.0;
 
-        return jb.timer("explosion") < this.FIREBALL_TIME;
+        jb.until(jb.timer("explosion") >= this.FIREBALL_TIME);
     },
 
     resolveHitDestroyer: function() {
@@ -392,10 +417,11 @@ game = {
     hitSub: function() {
         this.destroyer.score += 1;
         this.sub.state = this.STATE.DEAD;
+        this.hitSound.play();
         jb.startTimer("explosion");
     },
 
-    hitSub_loop: function() {
+    do_hitSub: function() {
         // Fireball.
         var x = Math.round(this.missile.x + 8 * this.missile.scale_x * 0.5),
             y = Math.round(this.missile.y - 8 * this.missile.scale_y * 0.5);
@@ -404,7 +430,7 @@ game = {
         this.drawFireball(jb.timer("explosion"), this.missile.targetLane, x, y);
         this.drawDestroyer();
 
-        return jb.timer("explosion") < this.FIREBALL_TIME;
+        jb.until(jb.timer("explosion") >= this.FIREBALL_TIME);
     },
 
     setupEndRound: function() {
@@ -421,15 +447,16 @@ game = {
         }
     },
 
-    endRound_loop: function() {
+    do_endRound: function() {
         this.drawBoard();
         this.drawDestroyer();
 
-        return !jb.tap.done;
+        jb.until(jb.tap.done);
     },
 
     endRound: function() {
         this.banner = null;
+        this.tapSound.play();
 
         if (this.destroyer.score >= this.WINNING_SCORE ||
             this.sub.score >= this.WINNING_SCORE) {
@@ -458,19 +485,14 @@ game = {
         jb.listenForTap();
     },
 
-    gameOver_loop: function() {
+    do_gameOver: function() {
         this.drawBoard();
 
         if (this.destroyer.score >= this.WINNING_SCORE) {
-            this.banner = "YOU WIN!";
             this.drawDestroyer();
         }
 
-        if (this.sub.score >= this.WINNING_SCORE) {
-            this.banner = "YOU LOSE";
-        }
-
-        return !jb.tap.done;
+        jb.until(jb.tap.done);
     },
 
     playAgain: function() {
@@ -565,15 +587,15 @@ game = {
             iCloud = 0;
 
         // Fill background
-        jb.setBackColor(game.SKY_COLOR);
+        jb.setBackColor(this.SKY_COLOR);
         jb.clear();
 
-        for (iWave = 0; iWave < game.NUM_LANES; ++iWave) {
+        for (iWave = 0; iWave < this.NUM_LANES; ++iWave) {
             jb.ctxt.fillStyle = this.getLaneColor(iWave);
             jb.ctxt.fillRect(0, this.yTop + this.laneHeight * iWave, jb.canvas.width, this.laneHeight); 
         }
 
-        jb.ctxt.fillRect(0, this.yTop + this.laneHeight * (game.NUM_LANES - 1), jb.canvas.width, jb.canvas.height - this.laneHeight * (game.NUM_LANES - 1));
+        jb.ctxt.fillRect(0, this.yTop + this.laneHeight * (this.NUM_LANES - 1), jb.canvas.width, jb.canvas.height - this.laneHeight * (this.NUM_LANES - 1));
 
         // Draw the clouds
         for (iCloud = 0; iCloud < this.clouds.length; ++iCloud) {
@@ -669,7 +691,8 @@ game = {
     moveSubToNewLane: function() {
         var bHidden = false,
             lane = 0,
-            i = 0;
+            i = 0
+            nextLane = Math.random() < 0.5 ? 1 : -1;
 
         lane = Math.floor(Math.random() * this.NUM_LANES);
         while (!bHidden) {
@@ -680,10 +703,16 @@ game = {
                 // ...if this is a used lane...
                 if (this.sub.hidingSpots[i] === lane) {
                     // ...move to the next lane...
-                    lane = lane + 1;
+                    lane = lane + nextLane;
 
-                    // ...wrap around, if necessary...
-                    lane = lane % this.NUM_LANES;
+                    // ...handle underflow...
+                    if (lane < 0) {
+                        lane = this.sub.hidingSpots.length - 1;
+                    }
+                    else {
+                        // ...and overflow.
+                        lane = lane % this.NUM_LANES;
+                    }
 
                     // ...and try again with this new lane.
                     bHidden = false;
@@ -699,7 +728,8 @@ game = {
     getNewSubTarget: function() {
         var bHidden = false,
             lane = 0,
-            i = 0;
+            i = 0,
+            nextLane = Math.random() < 0.5 ? 1 : -1;
 
         lane = Math.floor(Math.random() * this.NUM_LANES);
         while (!bHidden) {
@@ -710,10 +740,16 @@ game = {
                 // ...if this is a used lane...
                 if (this.sub.targetLanes[i] === lane) {
                     // ...move to the next lane...
-                    lane = lane + 1;
+                    lane = lane + nextLane;
 
-                    // ...wrap around, if necessary...
-                    lane = lane % this.NUM_LANES;
+                    // Handle underflow...
+                    if (lane < 0) {
+                        lane = this.sub.targetLanes.length - 1;
+                    }
+                    else {
+                        // ...and overflow.
+                        lane = lane % this.NUM_LANES;
+                    }
 
                     // ...and try again with this new lane.
                     bHidden = false;
@@ -725,9 +761,4 @@ game = {
         this.torpedo.targetLane = lane;
         this.sub.targetLanes.push(lane);
     }
-};
-
-// Start the game!
-window.onload = function() {
-    jb.run(game);
 };

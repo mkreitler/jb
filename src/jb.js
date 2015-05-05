@@ -8,16 +8,26 @@ jb.pc               = -1;    // Program counter
 jb.fnIndex          = 0;
 jb.loopingRoutine   = null;
 jb.context          = null;
-jb.LOOP_ID          = "_LOOP";
+jb.LOOP_ID          = "DO_";
 jb.bShowStopped     = true;
 jb.time             = {now: Date.now(), deltaTime: 0, deltaTimeMS: 0};
 jb.timers           = {};
+jb.bUntil           = false;
+jb.bWhile           = false;
 
 // OS Commands /////////////////////////////////////////////////////////////////
 jb.add = function(fn, label) {
     jb.instructions.push({type: "block", code: fn, label: label || "fn" + jb.fnIndex});
     jb.fnIndex += 1;
 };
+
+jb.until = function(bUntil) {
+    jb.bUntil = bUntil;
+},
+
+jb.while = function(bWhile) {
+    jb.bWhile = bWhile;
+}
 
 // Loop code, when added, will continue to execute as long as it returns 'true'.
 jb.addLoop = function(loop, label) {
@@ -37,7 +47,7 @@ jb.run = function(program) {
         // Move the program's functions into the jb virtual machine.
         for (key in program) {
             if (typeof(program[key]) === "function") {
-                if (key.length >= jb.LOOP_ID.length && key.substr(key.length - jb.LOOP_ID.length).toUpperCase() === jb.LOOP_ID) {
+                if (key.length >= jb.LOOP_ID.length && key.substr(0, jb.LOOP_ID.length).toUpperCase() === jb.LOOP_ID) {
                     jb.addLoop(program[key], key);
                 }
                 else {
@@ -84,7 +94,18 @@ jb.loop = function() {
     jb.updateTimers();
 
     if (jb.loopingRoutine) {
-        if (!jb.loopingRoutine.bind(jb.context)()) {
+        jb.bWhile = null;
+        jb.bUntil = null;
+        jb.loopingRoutine.bind(jb.context)();
+
+        if (jb.bWhile === null && jb.bUntil === null) {
+            jb.print("Missing 'jb.while' or 'jb.until' in " + jb.instructions[jb.pc].label);
+            jb.end();
+        }
+        else if (jb.bUntil === true) {
+            jb.nextInstruction();
+        }
+        else if (jb.bWhile === false) {
             jb.nextInstruction();
         }
     }
@@ -136,21 +157,30 @@ jb.updateTimers = function() {
     jb.time.deltaTime = jb.time.deltaTimeMS * 0.001;
 
     for (key in jb.timers) {
-        jb.timers[key] += jb.time.deltaTime;
+        jb.timers[key].last = jb.timers[key].now;
+        jb.timers[key].now += jb.time.deltaTime;
     }
 };
 
 jb.startTimer = function(timerName) {
-    jb.timers[timerName] = 0;
+    jb.timers[timerName] = jb.timers[timerName] || {now: 0, last: -1};
+
+    jb.timers[timerName].now = 0;
+    jb.timers[timerName].last = -1;
 };
 
 jb.setTimer = function(timerName, timerVal) {
-    jb.timers[timerName] = timerVal;
+    jb.timers[timerName].now = timerVal;
+    jb.timers[timerName].last = timerVal;
 };
 
 jb.timer = function(timerName) {
-    return jb.timers[timerName] || 0;
+    return jb.timers[timerName] ? jb.timers[timerName].now : 0;
 };
+
+jb.timerLast = function(timerName) {
+    return jb.timers[timerName] ? jb.timers[timerName].last : -1;
+}
 
 // View ////////////////////////////////////////////////////////////////////////
 // Get canvas and resize to fit window.
@@ -177,9 +207,15 @@ jb.cellSize = {width: 0, height: 0};
 jb.globalScale = 1;
 
 jb.create = function() {
+    var div = document.createElement('div');
+    div.align = "center";
+
     jb.canvas = document.createElement('canvas');
+
     jb.screenBuffer = document.createElement('canvas');
-    document.body.appendChild(jb.screenBuffer);
+    div.appendChild(jb.screenBuffer);
+    document.body.appendChild(div);
+
     jb.ctxt = jb.canvas.getContext("2d");
     jb.screenBufferCtxt = jb.screenBuffer.getContext("2d");
 
@@ -751,7 +787,7 @@ window.addEventListener("touchend", jb.touchEnd, true);
         };
 }());
 
-// Fonts ///////////////////////////////////////////////////////////////////////
+// FONTS ///////////////////////////////////////////////////////////////////////
 // Fonts are bitmapped character sets. They default to 16x16 size and can be
 // scaled in integer amounts.
 jb.fonts = {
@@ -3523,7 +3559,7 @@ jb.fonts = {
     }
 };
 
-// Glyphs //////////////////////////////////////////////////////////////////////
+// GLYPHS //////////////////////////////////////////////////////////////////////
 // Glyphs are pre-defined images that can be used for games and such.
 // Glyphs are defined in code using an array of strings, where each
 // pair of characters represents a hexidecimal lookup into one of
@@ -4514,6 +4550,7 @@ jb.glyphs = {
     ]
 };
 
+// SOUND //////////////////////////////////////////////////////////////////////
 jb.sound = {
     DEFAULT_FREQ: 440, // Hz
     DEFAULT_VOL: 1.0,
@@ -4542,7 +4579,7 @@ jb.sound = {
         startFreq = startFreq || this.DEFAULT_FREQ;
         endFreq = endFreq || startFreq;
 
-        return this.audioContext ? this.newSoundFromBuffer(this.getBuffer(waveform, startFreq, endFreq, volume, duration)) : this.dummySound;
+        return this.audioContext ? this.newSoundFromBuffer(this.getBuffer(waveform, startFreq, endFreq, volume, duration), duration) : this.dummySound;
     },
 
     waveFns: {
@@ -4591,7 +4628,7 @@ jb.sound = {
             waveFn = this.waveFns[waveform] || this.waveFns["sine"],
             iChannel = 0,
             iSample = 0,
-            bNoise = waveform.toUpperCase() === "PINKNOISE",
+            bPinkNoise = waveform.toUpperCase() === "PINKNOISE",
             iPhase = 0,
             iWave = 0,
             maxAmp = 0,
@@ -4602,7 +4639,7 @@ jb.sound = {
         for (iChannel = 0; iChannel < this.channels; ++iChannel) {
             samples = buffer.getChannelData(iChannel);
 
-            if (bNoise) {
+            if (bPinkNoise) {
                 // Generate noise in the given frequency band by piecing together
                 // square waves of random frequencies from within the band.
                 numWaves = Math.min(Math.floor((endFreq - startFreq) * 0.33), jb.sound.WAVES_PER_NOISE);
@@ -4621,13 +4658,9 @@ jb.sound = {
                             samples[iSample] += -1.0 / freq;
                         }
 
-                        if(Math.abs(samples[iSample]) > maxAmp) {
+                        if (Math.abs(samples[iSample]) > maxAmp) {
                             maxAmp = Math.abs(samples[iSample]);
                         }
-                    }
-
-                    for (iSample = 0; iSample < nSamples; ++iSample) {
-                        samples[iSample] = samples[iSample] / maxAmp * Math.min(1.0, vol);
                     }
                 }
             }
@@ -4635,8 +4668,18 @@ jb.sound = {
                 for (iSample = 0; iSample < nSamples; ++iSample) {
                     t = iSample / this.audioContext.sampleRate;
                     freq = startFreq + (endFreq - startFreq) * t / dur;
-                    samples[iSample] = Math.min(1.0, vol) * waveFn(freq, t, iSample);
+                    samples[iSample] = waveFn(freq, t, iSample);
+
+                    if (Math.abs(samples[iSample]) > maxAmp) {
+                        maxAmp = Math.abs(samples[iSample]);
+                    }
                 }
+            }
+
+
+            // Normalize and apply volume.
+            for (iSample = 0; iSample < nSamples; ++iSample) {
+                samples[iSample] = samples[iSample] / maxAmp * Math.min(1.0, vol);
             }
 
             // Ramp up the opening samples.
@@ -4653,185 +4696,44 @@ jb.sound = {
         return buffer;
     },
 
-    newSoundFromBuffer: function(buffer) {
-        var nodePCM = this.audioContext.createBufferSource();
+    newSoundFromBuffer: function(buffer, duration) {
+        var self = this;
 
-        nodePCM.buffer = buffer;
-
-        nodePCM.onended = function() {
-            nodePCM.disconnect(jb.sound.audioContext.destination);
-        }
-
-        return {audioNode: nodePCM, play: function() { nodePCM.connect(jb.sound.audioContext.destination); nodePCM.start(0); }, stop: function() { nodePCM.stop(); }};
+        return {
+                duration: duration,
+                node: null,
+                play: function() {
+                    this.node = self.audioContext.createBufferSource();
+                    this.node.buffer = buffer;
+                    this.node.onEnded = function() {
+                        this.node.disconnect(jb.sound.audioContext.destination);
+                        this.node = null;
+                    }
+                    this.node.connect(jb.sound.audioContext.destination);
+                    this.node.start(0);
+                },
+                stop: function() {
+                    if (this.node) {
+                        this.node.stop();
+                    }
+                    this.node = null;
+                }
+            };
     }
 };
 
 jb.sound.init();
 
-// jb.riffWave = {
-//     /* 
-//      * RIFFWAVE.js v0.03 - Audio encoder for HTML5 <audio> elements.
-//      * Copyleft 2011 by Pedro Ladaria <pedro.ladaria at Gmail dot com>
-//      *
-//      * Public Domain
-//      *
-//      * Changelog:
-//      *
-//      * 0.01 - First release
-//      * 0.02 - New faster base64 encoding
-//      * 0.03 - Support for 16bit samples
-//      *
-//      * Notes:
-//      *
-//      * 8 bit data is unsigned: 0..255
-//      * 16 bit data is signed: âˆ’32,768..32,767
-//      *
-//      */
+jb.program = {
+    defaultRoutine: function() {
+        jb.setBackColor("black");
+        jb.setForeColor("red");
+        jb.print("No program defined!");
+        jb.setForeColor("gray");
+    }
+};
 
-//     dummyAudio: {
-//         play: function() {
-//             // Does nothing.
-//         }
-//     },
-
-//     makeTestSound: function() {
-//         var testAudio = document.createElement('audio');
-//         var audio =  testAudio.canPlayType('audio/mpeg;') === "no" ? this.dummyAudio : new Audio(); // create the HTML5 audio element
-
-//         if (audio !== this.dummyAudio) {
-//             var wave = new jb.sound.RIFFWAVE(); // create an empty wave file
-//             var data = []; // yes, it's an array
-
-//             wave.header.sampleRate = 44100; // set sample rate to 44KHz
-//             wave.header.numChannels = 2; // two channels (stereo)
-
-//             var i = 0;
-//             while (i<100000) { 
-//               data[i++] = 128+Math.round(127*Math.sin(i/10)); // left speaker
-//               data[i++] = 128+Math.round(127*Math.sin(i/200)); // right speaker
-//             }
-
-//             wave.Make(data); // make the wave file
-//             audio.src = wave.dataURI; // set audio source
-//         }
-
-//         return audio;
-//     },
-
-//     FastBase64: {
-
-//         chars: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=",
-//         encLookup: [],
-
-//         Init: function() {
-//             for (var i=0; i<4096; i++) {
-//                 this.encLookup[i] = this.chars[i >> 6] + this.chars[i & 0x3F];
-//             }
-
-//             if (window.MediaSource) {
-//                 this.mediaSource = new window.MediaSource();
-//             }            
-//         },
-
-//         Encode: function(src) {
-//             var len = src.length;
-//             var dst = '';
-//             var i = 0;
-//             while (len > 2) {
-//                 n = (src[i] << 16) | (src[i+1]<<8) | src[i+2];
-//                 dst+= this.encLookup[n >> 12] + this.encLookup[n & 0xFFF];
-//                 len-= 3;
-//                 i+= 3;
-//             }
-//             if (len > 0) {
-//                 var n1= (src[i] & 0xFC) >> 2;
-//                 var n2= (src[i] & 0x03) << 4;
-//                 if (len > 1) n2 |= (src[++i] & 0xF0) >> 4;
-//                 dst+= this.chars[n1];
-//                 dst+= this.chars[n2];
-//                 if (len == 2) {
-//                     var n3= (src[i++] & 0x0F) << 2;
-//                     n3 |= (src[i] & 0xC0) >> 6;
-//                     dst+= this.chars[n3];
-//                 }
-//                 if (len == 1) dst+= '=';
-//                 dst+= '=';
-//             }
-//             return dst;
-//         } // end Encode
-
-//     },
-
-//     RIFFWAVE: function(data) {
-
-//         this.data = [];        // Array containing audio samples
-//         this.wav = [];         // Array containing the generated wave file
-//         this.dataURI = '';     // http://en.wikipedia.org/wiki/Data_URI_scheme
-
-//         this.header = {                         // OFFS SIZE NOTES
-//             chunkId      : [0x52,0x49,0x46,0x46], // 0    4    "RIFF" = 0x52494646
-//             chunkSize    : 0,                     // 4    4    36+SubChunk2Size = 4+(8+SubChunk1Size)+(8+SubChunk2Size)
-//             format       : [0x57,0x41,0x56,0x45], // 8    4    "WAVE" = 0x57415645
-//             subChunk1Id  : [0x66,0x6d,0x74,0x20], // 12   4    "fmt " = 0x666d7420
-//             subChunk1Size: 16,                    // 16   4    16 for PCM
-//             audioFormat  : 1,                     // 20   2    PCM = 1
-//             numChannels  : 1,                     // 22   2    Mono = 1, Stereo = 2...
-//             sampleRate   : 8000,                  // 24   4    8000, 44100...
-//             byteRate     : 0,                     // 28   4    SampleRate*NumChannels*BitsPerSample/8
-//             blockAlign   : 0,                     // 32   2    NumChannels*BitsPerSample/8
-//             bitsPerSample: 8,                     // 34   2    8 bits = 8, 16 bits = 16
-//             subChunk2Id  : [0x64,0x61,0x74,0x61], // 36   4    "data" = 0x64617461
-//             subChunk2Size: 0                      // 40   4    data size = NumSamples*NumChannels*BitsPerSample/8
-//         };
-
-//         function u32ToArray(i) {
-//             return [i&0xFF, (i>>8)&0xFF, (i>>16)&0xFF, (i>>24)&0xFF];
-//         }
-
-//         function u16ToArray(i) {
-//             return [i&0xFF, (i>>8)&0xFF];
-//         }
-
-//         function split16bitArray(data) {
-//             var r = [];
-//             var j = 0;
-//             var len = data.length;
-//             for (var i=0; i<len; i++) {
-//                 r[j++] = data[i] & 0xFF;
-//                 r[j++] = (data[i]>>8) & 0xFF;
-//             }
-//             return r;
-//         }
-
-//         this.Make = function(data) {
-//             if (data instanceof Array) this.data = data;
-//             this.header.blockAlign = (this.header.numChannels * this.header.bitsPerSample) >> 3;
-//             this.header.byteRate = this.header.blockAlign * this.sampleRate;
-//             this.header.subChunk2Size = this.data.length * (this.header.bitsPerSample >> 3);
-//             this.header.chunkSize = 36 + this.header.subChunk2Size;
-
-//             this.wav = this.header.chunkId.concat(
-//                 u32ToArray(this.header.chunkSize),
-//                 this.header.format,
-//                 this.header.subChunk1Id,
-//                 u32ToArray(this.header.subChunk1Size),
-//                 u16ToArray(this.header.audioFormat),
-//                 u16ToArray(this.header.numChannels),
-//                 u32ToArray(this.header.sampleRate),
-//                 u32ToArray(this.header.byteRate),
-//                 u16ToArray(this.header.blockAlign),
-//                 u16ToArray(this.header.bitsPerSample),    
-//                 this.header.subChunk2Id,
-//                 u32ToArray(this.header.subChunk2Size),
-//                 (this.header.bitsPerSample == 16) ? split16bitArray(this.data) : this.data
-//             );
-//             this.dataURI = 'data:audio/wav;base64,'+ jb.sound.FastBase64.Encode(this.wav);
-//         };
-
-//         if (data instanceof Array) this.Make(data);
-
-//     } // end RIFFWAVE
-// };
-
-// // Initialize the sound system.
-// jb.sound.FastBase64.Init();
+// Start the game!
+window.onload = function() {
+    jb.run(jb.program);
+};
