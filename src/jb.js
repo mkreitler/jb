@@ -14,7 +14,6 @@ jb.time             = {now: Date.now(), deltaTime: 0, deltaTimeMS: 0};
 jb.timers           = {};
 jb.bUntil           = false;
 jb.bWhile           = false;
-jb.frameMS          = Math.round(1000 / 20);    // 20 Hz game logic update
 
 // OS Commands /////////////////////////////////////////////////////////////////
 jb.add = function(fn, label) {
@@ -61,9 +60,7 @@ jb.run = function(program) {
         jb.pc = -1;
         jb.clear();
 
-        setTimeout(jb.loop, jb.frameMS);
-
-        requestAnimationFrame(jb.render);
+        requestAnimationFrame(jb.loop);
     }
 };
 
@@ -117,19 +114,15 @@ jb.loop = function() {
         jb.nextInstruction();
     }
 
-    if (jb.pc < jb.instructions.length) {
-        setTimeout(jb.loop, jb.frameMS);
-    }
+    jb.render();
 };
 
 jb.render = function() {
     // Refresh the screen.
     jb.screenBufferCtxt.drawImage(jb.canvas, 0, 0);
 
-    console.log("Draw");
-
     // Request a new a update.
-    requestAnimationFrame(jb.render);
+    requestAnimationFrame(jb.loop);
 };
 
 jb.nextInstruction = function() {
@@ -148,7 +141,6 @@ jb.nextInstruction = function() {
         }
         else {
             jb.loopingRoutine = instr.code;
-            jb.loop();
             break;
         }
     }
