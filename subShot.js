@@ -1,7 +1,72 @@
-// Acey-ducey card game
+jb.test = {
+    which: 1,
+
+    draw: function() {
+        requestAnimationFrame(jb.test.draw);
+
+        jb.screenBufferCtxt.beginPath();
+
+        if (jb.test.which) {
+            jb.screenBufferCtxt.fillStyle = "red";
+        }
+        else {
+            jb.screenBufferCtxt.fillStyle = "green";
+        }
+
+        jb.screenBufferCtxt.fillRect(0, 0, 50, 50);
+
+        jb.test.which = 1 - jb.test.which;
+    }
+};
+
+jb.program3 = {
+    f1: function() {
+        requestAnimationFrame(jb.test.draw);
+    }
+};
+
+jb.program = {
+    which: 1,
+    timeLimit: 10,
+
+    start: function() {
+        jb.startTimer("testTimer");
+    },
+
+    do_test: function() {
+        if (this.which) {
+            jb.setBackColor("black");
+            jb.clear();
+
+            jb.ctxt.beginPath();
+            jb.ctxt.fillStyle = "rgba(" + Math.round(jb.timer("testTimer") * 255 / this.timeLimit) + ", 0, 0, 1)";
+            jb.ctxt.arc(100, 300, 25, 0, 2 * Math.PI, true);
+            jb.ctxt.fill();
+            console.log("1");
+        }
+        else {
+            jb.setBackColor("black");
+            jb.clear();
+
+            jb.ctxt.beginPath();
+            jb.ctxt.fillStyle = "rgba(0, 0, " + Math.round(jb.timer("testTimer") * 255 / this.timeLimit) + ", 1)";
+            jb.ctxt.arc(800, 300, 25, 0, 2 * Math.PI, true);
+            jb.ctxt.fill();
+            console.log("2");
+        }
+
+        this.which = 1 - this.which;
+
+        jb.until(jb.timer("testTimer") > this.timeLimit);
+    },
+
+    end: function() {
+        jb.end();
+    }
+};
 
 // Create an object that will be the game:
-jb.program = {
+jb.program2 = {
     // Variables and data //////////////////////////////////////////////////////
     BACK_COLOR: "rgba(0, 32, 128, 1)",
     SKY_COLOR: "rgba(64, 128, 255, 1)",
