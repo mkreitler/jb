@@ -27,6 +27,7 @@ jb.program = {
     ALARM_REPLAY_FACTOR: 2.67,
 
     message: null,
+    bottomMessage: null,
     messageRGB: "0, 0, 0",
     clouds: [],
     yTop: 0,
@@ -93,14 +94,14 @@ jb.program = {
         this.banner = null;
 
         jb.fonts.printAt("military", 1, 40, "***Sub Shot***", "yellow", 0.5, 0.0, 4);
-        jb.fonts.printAt("military", 4, 40, "Sink the enemy sub!`", "gray", 0.5, 0.0, 2);
-        jb.fonts.printAt("military", 6, 40, "Place your destroyer in one of the shipping lanes.`", "gray", 0.5, 0.0, 1);
-        jb.fonts.printAt("military", 7, 40, "Then, tap a lane to launch an anti-submarine missile.`", "gray", 0.5, 0.0, 1);
-        jb.fonts.printAt("military", 8, 40, "After each launch, the sub will surface and fire a torpedo.`", "gray", 0.5, 0.0, 1);
-        jb.fonts.printAt("military", 9, 40, "If you survive, you can fire another missile, but the sub`", "gray", 0.5, 0.0, 1);
-        jb.fonts.printAt("military", 10, 40, "moves to a new lane each turn. It will never return to a lane`", "gray", 0.5, 0.0, 1);
-        jb.fonts.printAt("military", 11, 40, "from which it has already fired.`", "gray", 0.5, 0.0, 1);
-        jb.fonts.printAt("military", 13, 40, "<TAP> to start!", "gray", 0.5, 0.0, 2);
+        jb.fonts.printAt("military", 7, 40, "Sink the enemy sub!`", "gray", 0.5, 0.0, 2);
+        jb.fonts.printAt("military", 9, 40, "Place your destroyer in one of the shipping lanes.`", "gray", 0.5, 0.0, 1);
+        jb.fonts.printAt("military", 10, 40, "Then, tap a lane to launch an anti-submarine missile.`", "gray", 0.5, 0.0, 1);
+        jb.fonts.printAt("military", 11, 40, "After you fire, the sub will launch a torpedo.`", "gray", 0.5, 0.0, 1);
+        jb.fonts.printAt("military", 12, 40, "If you survive, you can fire another missile, but`", "gray", 0.5, 0.0, 1);
+        jb.fonts.printAt("military", 13, 40, "the sub moves to a new lane each turn. It will never`", "gray", 0.5, 0.0, 1);
+        jb.fonts.printAt("military", 14, 40, "return to a lane from which it has already fired.`", "gray", 0.5, 0.0, 1);
+        jb.fonts.printAt("military", 16, 40, "<TAP> to start!", "gray", 0.5, 0.0, 2);
 
         jb.startTimer("alarm");
         this.alarmSound.play();
@@ -119,7 +120,7 @@ jb.program = {
 
     setupPlaceDestroyer: function() {
         this.messageRGB = "0, 0, 0";
-        this.message = "<TAP> a blue lane to place your ship.";
+        this.message = "Tap to place your ship.";
         jb.listenForTap();
         this.tapSound.play();
 
@@ -176,7 +177,7 @@ jb.program = {
         // Proceed to the next phase, where we wait for the player
         // to fire a missile.
         this.messageRGB = "0, 0, 0";
-        this.message = "<Tap> a lane to fire a missile.";
+        this.message = "Tap a lane to fire.";
         this.moveSubToNewLane();
         this.sub.state = this.STATE.OK;
         jb.listenForTap();
@@ -440,12 +441,14 @@ jb.program = {
         if (this.sub.state === this.STATE.DEAD) {
             this.messageRGB = "0, 128, 0";
             this.banner = "Hit!";
-            this.message = "Score: " + this.destroyer.score + " to " + this.sub.score + ". <TAP> to continue.";
+            this.message = "You: " + this.destroyer.score + " Sub: " + this.sub.score;
         }
         else if (this.destroyer.state === this.STATE.DEAD) {
             this.messageRGB = "255, 0, 0";
-            this.message = "Score: " + this.destroyer.score + " to " + this.sub.score + ". <TAP> to continue.";
+            this.message = "You: " + this.destroyer.score + " Sub: " + this.sub.score;
         }
+
+        this.bottomMessage = "<Tap> to continue..."
     },
 
     do_endRound: function() {
@@ -457,6 +460,7 @@ jb.program = {
 
     endRound: function() {
         this.banner = null;
+        this.bottomMessage = null;
         this.tapSound.play();
 
         if (this.destroyer.score >= this.WINNING_SCORE ||
@@ -610,11 +614,16 @@ jb.program = {
 
         if (this.message) {
             jb.colorRows("rgba(" + this.messageRGB + ", 0.85)", 3, 4);
-            jb.fonts.printAt("military", 3, 40, this.message, "white", 0.5, 0.5, 2);
+            jb.fonts.printAt("military", 3.5, 40, this.message, "white", 0.5, 0.0, 2);
         }
 
         if (this.banner) {
             jb.fonts.printAt("military", Math.round(jb.rows / 2), 40, this.banner, "white", 0.5, 0.0, 4);
+        }
+
+        if (this.bottomMessage) {
+            jb.colorRows("rgba(0, 0, 0, 0.85)", jb.rows - 2, jb.rows - 1);
+            jb.fonts.printAt("military", jb.rows - 1.5, 40, this.bottomMessage, "white", 0.5, 0.0, 1);
         }
     },
 

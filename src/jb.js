@@ -327,7 +327,6 @@ jb.resizeFont = function() {
     jb.fontInfo = "" + jb.fontSize + "px Courier";
     jb.ctxt.font = jb.fontInfo;
 
-
     jb.rows = Math.floor(jb.canvas.height / jb.fontSize);
     jb.cellSize.width = jb.ctxt.measureText("W").width;
     jb.cellSize.height = Math.floor(jb.fontSize) + 1;
