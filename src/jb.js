@@ -1,19 +1,25 @@
 // Define the jb objects
-jb = {};
+jb = {
+    execStack: [],
+};
 
 // Virtual Machine /////////////////////////////////////////////////////////////
 jb.instructions     = []
 jb.bStarted         = false;
-jb.pc               = -1;    // Program counter
 jb.fnIndex          = 0;
-jb.loopingRoutine   = null;
 jb.context          = null;
 jb.LOOP_ID          = "DO_";
 jb.bShowStopped     = true;
+jb.interrupt        = false;
 jb.time             = {now: Date.now(), deltaTime: 0, deltaTimeMS: 0};
 jb.timers           = {};
-jb.bUntil           = false;
-jb.bWhile           = false;
+
+jb.stackFrame = function(pc) {
+    this.pc               = pc;    // Program counter
+    this.loopingRoutine   = null;
+    this.bUntil           = false;
+    this.bWhile           = false;
+};
 
 // OS Commands /////////////////////////////////////////////////////////////////
 jb.add = function(fn, label) {
@@ -22,11 +28,11 @@ jb.add = function(fn, label) {
 };
 
 jb.until = function(bUntil) {
-    jb.bUntil = bUntil;
+    jb.execStack[0].bUntil = bUntil;
 },
 
 jb.while = function(bWhile) {
-    jb.bWhile = bWhile;
+    jb.execStack[0].bWhile = bWhile;
 }
 
 // Loop code, when added, will continue to execute as long as it returns 'true'.
@@ -56,8 +62,9 @@ jb.run = function(program) {
             }
         }
 
+        jb.execStack.unshift(new jb.stackFrame(-1));
+
         jb.context = program;
-        jb.pc = -1;
         jb.clear();
 
         requestAnimationFrame(jb.loop);
@@ -65,6 +72,21 @@ jb.run = function(program) {
 };
 
 // Runtime Commands ////////////////////////////////////////////////////////////
+jb.gosub = function(label) {
+    var i;
+
+    label = label.toUpperCase();
+
+    for (i=0; i<jb.instructions.length; ++i) {
+        if (jb.instructions[i] &&
+            jb.instructions[i].label.toUpperCase() === label) {
+            jb.bInterrupt = true;
+            jb.execStack.unshift(new jb.stackFrame(i - 1));
+            break;
+        }
+    }
+};
+
 jb.goto = function(label) {
     var i;
 
@@ -73,20 +95,17 @@ jb.goto = function(label) {
     for (i=0; i<jb.instructions.length; ++i) {
         if (jb.instructions[i] &&
             jb.instructions[i].label.toUpperCase() === label) {
-            jb.pc = i - 1;
-            jb.loopingRoutine = false;
+            jb.execStack[0].pc = i - 1;
+            jb.execStack[0].loopingRoutine = null;
             break;
         }
     }
 };
 
 jb.end = function() {
-    if (jb.loopingRoutine) {
-        jb.loopingRoutine = null;
+    jb.execStack.shift();
+    if (jb.execStack.length > 0) {
         jb.nextInstruction();
-    }
-    else {
-        jb.pc = jb.instructions.length;
     }
 };
 
@@ -94,30 +113,41 @@ jb.end = function() {
 jb.loop = function() {
     jb.updateTimers();
 
-    if (jb.loopingRoutine) {
-        jb.bWhile = null;
-        jb.bUntil = null;
-        jb.loopingRoutine.bind(jb.context)();
-
-        if (jb.bWhile === null && jb.bUntil === null) {
-            jb.print("Missing 'jb.while' or 'jb.until' in " + jb.instructions[jb.pc].label);
-            jb.end();
-        }
-        else if (jb.bUntil === true) {
-            jb.nextInstruction();
-        }
-        else if (jb.bWhile === false) {
-            jb.nextInstruction();
-        }
-    }
-    else if (jb.pc < jb.instructions.length) {
+    if (jb.bInterrupt) {
         jb.nextInstruction();
+    }
+    else if (jb.execStack.length > 0) {
+        if (jb.execStack[0].loopingRoutine) {
+            jb.execStack[0].bWhile = null;
+            jb.execStack[0].bUntil = null;
+            jb.execStack[0].loopingRoutine.bind(jb.context)();
+
+            if (jb.execStack[0].bWhile === null && jb.execStack[0].bUntil === null) {
+                jb.print("Missing 'jb.while' or 'jb.until' in " + jb.instructions[jb.execStack[0].pc].label);
+                jb.end();
+            }
+            else if (jb.execStack[0].bUntil === true) {
+                jb.nextInstruction();
+            }
+            else if (jb.execStack[0].bWhile === false) {
+                jb.nextInstruction();
+            }
+        }
+        else if (jb.execStack[0].pc < jb.instructions.length) {
+            jb.nextInstruction();
+        }
     }
 
     jb.render();
 };
 
 jb.render = function() {
+    if (jb.execStack.length <= 0 && jb.bShowStopped) {
+        jb.bShowStopped = false;
+        jb.print("`");
+        jb.print("--- stopped ---");
+    }
+
     // Refresh the screen.
     jb.screenBufferCtxt.drawImage(jb.canvas, 0, 0);
 
@@ -128,27 +158,35 @@ jb.render = function() {
 jb.nextInstruction = function() {
     var instr = null;
 
-    for (jb.pc += 1; jb.pc<jb.instructions.length; jb.pc++) {
-        instr = jb.instructions[jb.pc];
+    if (jb.execStack.length > 0) {
+        for (jb.execStack[0].pc += 1; jb.execStack[0].pc<jb.instructions.length; jb.execStack[0].pc++) {
+            instr = jb.instructions[jb.execStack[0].pc];
 
-        jb.reset();
-        jb.resetBlink();
-        jb.bForcedBreak = false;
-        jb.loopingRoutine = null;
+            jb.reset();
+            jb.resetBlink();
+            jb.bForcedBreak = false;
+            jb.execStack[0].loopingRoutine = null;
 
-        if (instr.type === "block") {
-            instr.code.bind(jb.context)();
+            if (instr.type === "block") {
+                instr.code.bind(jb.context)();
+                if (jb.bInterrupt) {
+                    break;
+                }
+            }
+            else {
+                jb.execStack[0].loopingRoutine = instr.code;
+                break;
+            }
+
+            if (jb.execStack.length <= 0) {
+                break;
+            }
         }
-        else {
-            jb.loopingRoutine = instr.code;
-            break;
-        }
-    }
 
-    if (jb.pc >= jb.instructions.length && !jb.loopingRoutine && jb.bShowStopped) {
-        jb.bShowStopped = false;
-        jb.print("`");
-        jb.print("--- stopped ---");
+        if (jb.execStack.length > 0 && jb.execStack[0].pc >= jb.instructions.length) { // !jb.execStack[0].loopingRoutine && jb.bShowStopped) {
+            jb.execStack.shift();
+            jb.nextInstruction();
+        }
     }
 };
 
@@ -451,6 +489,7 @@ jb.reset = function() {
   jb.inputState = jb.INPUT_STATES.NONE;
   jb.inputOut = null;
   jb.got = null;
+  jb.bInterrupt = false;
 };
 
 jb.onPress = function(e) {

@@ -1,3 +1,34 @@
+jb.programTest = {
+    start: function() {
+        jb.print("Waiting for tap...");
+        jb.gosub("startWaitForTap");
+    },
+
+    mid: function() {
+        jb.print("done!`");
+        jb.print("Waiting for another tap...");
+        jb.gosub("startWaitForTap");
+    },
+
+    end: function() {
+        jb.print("done!`");
+        jb.end();
+    },
+
+    ///////////////////////////////////////////////////////////////////////////
+    startWaitForTap: function() {
+        jb.listenForTap();
+    },
+
+    do_waitForTap: function() {
+        jb.until(jb.tap.done);
+    },
+
+    endWaitForTap: function() {
+        jb.end();
+    },
+};
+
 // Create an object that will be the game:
 jb.program = {
     // Variables and data //////////////////////////////////////////////////////
@@ -5,7 +36,7 @@ jb.program = {
     SKY_COLOR: "rgba(64, 128, 255, 1)",
     NUM_LANES: 10,
     SKY_HEIGHT: 0.2,
-    MAX_CLOUDS: 8,
+    MAX_CLOUDS: 20,
     MAX_CLOUD_SCALE: 4,
     STATE: {DEAD: 0, OK: 1},
     SHIP: {X: 50, Y: 12, SCALE_X: 4, SCALE_Y: 2, SUB_OFFSET_Y: 4},
@@ -67,6 +98,8 @@ jb.program = {
 
         jb.setBackColor(this.BACK_COLOR);
         jb.clear();
+
+        this.clouds.length = 0;
 
         // Randomly position some clouds (but don't draw them, yet!).
         for (iCloud = 0; iCloud < this.MAX_CLOUDS; ++iCloud) {
@@ -717,7 +750,7 @@ jb.program = {
 
                     // ...handle underflow...
                     if (lane < 0) {
-                        lane = this.sub.hidingSpots.length - 1;
+                        lane = this.NUM_LANES - 1;
                     }
                     else {
                         // ...and overflow.
@@ -739,9 +772,11 @@ jb.program = {
         var bHidden = false,
             lane = 0,
             i = 0,
+            tries = 0,
             nextLane = Math.random() < 0.5 ? 1 : -1;
 
         lane = Math.floor(Math.random() * this.NUM_LANES);
+
         while (!bHidden) {
             bHidden = true;
 
@@ -754,7 +789,7 @@ jb.program = {
 
                     // Handle underflow...
                     if (lane < 0) {
-                        lane = this.sub.targetLanes.length - 1;
+                        lane = this.NUM_LANES - 1;
                     }
                     else {
                         // ...and overflow.
@@ -763,6 +798,10 @@ jb.program = {
 
                     // ...and try again with this new lane.
                     bHidden = false;
+                    ++tries;
+                    if (tries >= 10) {
+                        debugger;
+                    }
                     break;
                 }
             }
