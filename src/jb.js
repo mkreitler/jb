@@ -1,8 +1,357 @@
 // Define the jb objects
 jb = {
     execStack: [],
+    assert: function(test, msg) {
+        if (!test) {
+            console.log(msg);
+            debugger;
+        }
+    }
 };
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// oooooooooo.  ooooo        ooooo     ooo oooooooooooo ooooooooo.   ooooooooo.   ooooo ooooo      ooo ooooooooooooo  .oooooo..o 
+// `888'   `Y8b `888'        `888'     `8' `888'     `8 `888   `Y88. `888   `Y88. `888' `888b.     `8' 8'   888   `8 d8P'    `Y8 
+//  888     888  888          888       8   888          888   .d88'  888   .d88'  888   8 `88b.    8       888      Y88bo.      
+//  888oooo888'  888          888       8   888oooo8     888ooo88P'   888ooo88P'   888   8   `88b.  8       888       `"Y8888o.  
+//  888    `88b  888          888       8   888    "     888          888`88b.     888   8     `88b.8       888           `"Y88b 
+//  888    .88P  888       o  `88.    .8'   888       o  888          888  `88b.   888   8       `888       888      oo     .d8P 
+// o888bood8P'  o888ooooood8    `YbodP'    o888ooooood8 o888o        o888o  o888o o888o o8o        `8      o888o     8""88888P'  
+// Blueprints //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+blueprints = {
+    mixins: {},
+
+    make: function(proto, extension) {
+        var mixin = blueprints.mixins[extension];
+
+        if (proto && extension && blueprints.mixins[extension]) {
+            jb.assert(mixin.make, "Mixin " + extension + " must define a 'make' function!");
+            mixin.make(proto);
+        }
+    },
+
+    draft: function(name, dataFn, classObj) {
+        var args = Array.prototype.slice.call(arguments);
+
+        if (!blueprints[name]) {
+            classObj.components = [];
+            classObj.destroy = function() {
+                var i = 0;
+
+                for (i=0; i<this.components.length; ++i) {
+                    blueprints.mixins[this.components[i]].destroy(this);
+                }
+            }
+
+            // Mix in extra component functionality.
+            for (i=3; i<args.length; ++i) {
+                blueprints.make(classObj, args[i]);
+            }
+
+            classObj.constructor = dataFn;
+            dataFn.prototype = classObj;
+
+            blueprints[name] = dataFn;
+        }
+    },
+
+    build: function() {
+        var args = Array.prototype.slice.call(arguments),
+            dataFn = args && args.length > 0 ? blueprints[arguments[0]] : null,
+            blueprint = dataFn ? Function.prototype.bind.apply(dataFn, arguments) : null,
+            instance = null,
+            i = 0;
+
+            if (blueprint) {
+                blueprint.prototype = dataFn.prototype;
+            }
+
+            instance = blueprint ? new blueprint : null;
+            if (instance) {
+                instance.selfProto = dataFn.prototype;
+                instance.destroy = dataFn.prototype.destroy.bind(this);
+
+                for (i=0; i<instance.components.length; ++i) {
+                    blueprints.mixins[instance.components[i]].spawn(instance);
+                }
+
+                instance.onSpawned();
+            }
+
+        return instance;
+    }
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//   .oooooo.     .oooooo.   ooo        ooooo ooooooooo.     .oooooo.   ooooo      ooo oooooooooooo ooooo      ooo ooooooooooooo  .oooooo..o 
+//  d8P'  `Y8b   d8P'  `Y8b  `88.       .888' `888   `Y88.  d8P'  `Y8b  `888b.     `8' `888'     `8 `888b.     `8' 8'   888   `8 d8P'    `Y8 
+// 888          888      888  888b     d'888   888   .d88' 888      888  8 `88b.    8   888          8 `88b.    8       888      Y88bo.      
+// 888          888      888  8 Y88. .P  888   888ooo88P'  888      888  8   `88b.  8   888oooo8     8   `88b.  8       888       `"Y8888o.  
+// 888          888      888  8  `888'   888   888         888      888  8     `88b.8   888    "     8     `88b.8       888           `"Y88b 
+// `88b    ooo  `88b    d88'  8    Y     888   888         `88b    d88'  8       `888   888       o  8       `888       888      oo     .d8P 
+//  `Y8bood8P'   `Y8bood8P'  o8o        o888o o888o         `Y8bood8P'  o8o        `8  o888ooooood8 o8o        `8      o888o     8""88888P'  
+// Components //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// All components must define 'make', 'spawn', and 'destroy' functions in order
+// to be correctly added/removed by the 'blueprint' object.
+jb.touchables = {
+    componentID: "touchable",
+    instances: [],
+
+    // Adds 'touchable' functionality to prototype object received through
+    // the 'proto' argument.
+    make: function(proto) {
+        var key = null;
+
+        for (key in jb.touchables) {
+            if (key.indexOf(jb.touchables.componentID) >= 0) {
+                proto[key] = jb.touchables[key];
+            }
+        }
+
+        proto.components.push(jb.touchables.componentID);
+    },
+
+    makeInstance: function(instance) {
+        if (!instance.bounds) {
+            instance.bounds = new jb.bounds(0, 0, 0, 0);
+        }
+
+        if (!instance.touchLayer) {
+            instance.touchLayer = 0;
+        }
+    },
+
+    spawn: function(instance) {
+        var i = 0,
+            bInserted = false;
+
+        jb.touchables.makeInstance(instance);
+
+        for (i=0; i<jb.touchables.instances.length; ++i) {
+            if (instance.touchLayer < jb.touchables.instances[i].touchLayer) {
+                // Insert the instance at this point.                
+                jb.touchables.splice(i, 0, instance);
+                bInserted = true;
+                break;
+            }
+        }
+
+        if (!bInserted) {
+            jb.touchables.instances.push(instance);
+        }
+    },
+
+    destroy: function(instance) {
+        var index = jb.touchables.instances.indexOf(instance);
+
+        // Remove the instance from the instances array.
+        if (index >= 0) {
+            jb.touchables.instances.slice(index, 1);
+        }
+    },
+
+    getTouched: function(x, y) {
+        var i,
+            touched = null;
+
+        for (i=jb.touchables.instances.length - 1; i>=0; --i) {
+            if (jb.touchables.instances[i].bounds.contain(x, y)) {
+                touched = jb.touchables.instances[i];
+                break;
+            }
+        }
+
+        return touched;
+    },
+
+    // Mixins ---------------------------------------------
+    touchablesLayer: -1,
+
+};
+blueprints.mixins[jb.touchables.componentID] = jb.touchables;
+
+/////////////////////////////////////////////////////////////////////////////////////////////
+// ooooo   ooooo oooooooooooo ooooo        ooooooooo.   oooooooooooo ooooooooo.    .oooooo..o 
+// `888'   `888' `888'     `8 `888'        `888   `Y88. `888'     `8 `888   `Y88. d8P'    `Y8 
+//  888     888   888          888          888   .d88'  888          888   .d88' Y88bo.      
+//  888ooooo888   888oooo8     888          888ooo88P'   888oooo8     888ooo88P'   `"Y8888o.  
+//  888     888   888    "     888          888          888    "     888`88b.         `"Y88b 
+//  888     888   888       o  888       o  888          888       o  888  `88b.  oo     .d8P 
+// o888o   o888o o888ooooood8 o888ooooood8 o888o        o888ooooood8 o888o  o888o 8""88888P'  
+// Helpers //////////////////////////////////////////////////////////////////////////////////
+jb.removeFast = function(theArray, theElement) {
+    var index = theArray.indexOf(theElement);
+
+    if (index >= 0) {
+        theArray[index] = theArray[theArray.length - 1];
+        theArray.length -= 1;
+    }
+};
+
+// RequestAnimFrame ////////////////////////////////////////////////////////////
+// http://paulirish.com/2011/requestanimationframe-for-smart-animating/
+// http://my.opera.com/emoller/blog/2011/12/20/requestanimationframe-for-smart-er-animating
+ 
+// requestAnimationFrame polyfill by Erik Möller
+// fixes from Paul Irish and Tino Zijdel
+ 
+(function() {
+    var lastTime = 0;
+    var vendors = ['ms', 'moz', 'webkit', 'o'];
+    for(var x = 0; x < vendors.length && !window.requestAnimationFrame; ++x) {
+        window.requestAnimationFrame = window[vendors[x]+'RequestAnimationFrame'];
+        window.cancelAnimationFrame = window[vendors[x]+'CancelAnimationFrame']
+                                   || window[vendors[x]+'CancelRequestAnimationFrame'];
+    }
+ 
+    if (!window.requestAnimationFrame)
+        window.requestAnimationFrame = function(callback, element) {
+            var currTime = new Date().getTime();
+            var timeToCall = Math.max(0, 16 - (currTime - lastTime));
+            var id = window.setTimeout(function() { callback(currTime + timeToCall); },
+              timeToCall);
+            lastTime = currTime + timeToCall;
+            return id;
+        };
+ 
+    if (!window.cancelAnimationFrame)
+        window.cancelAnimationFrame = function(id) {
+            clearTimeout(id);
+        };
+}());
+
+
+///////////////////////////////////////////////////////////////////////////////
+// ooooooooooooo oooooo   oooo ooooooooo.   oooooooooooo  .oooooo..o 
+// 8'   888   `8  `888.   .8'  `888   `Y88. `888'     `8 d8P'    `Y8 
+//      888        `888. .8'    888   .d88'  888         Y88bo.      
+//      888         `888.8'     888ooo88P'   888oooo8     `"Y8888o.  
+//      888          `888'      888          888    "         `"Y88b 
+//      888           888       888          888       o oo     .d8P 
+//     o888o         o888o     o888o        o888ooooood8 8""88888P'  
+// Types //////////////////////////////////////////////////////////////////////
+jb.bounds = function(top, left, width, height) {
+    this.set(top, left, width, height);
+    this.isBound = true;
+};
+
+jb.bounds.prototype.draw = function(color, buffer) {
+    var ctxt = buffer || jb.ctxt;
+
+    ctxt.strokeStyle = color || "white";
+    ctxt.beginPath();
+    ctxt.moveTo(this.l, this.t);
+    ctxt.lineTo(this.l + this.w, this.t);
+    ctxt.lineTo(this.l + this.w, this.t + this.h);
+    ctxt.lineTo(this.l, this.t + this.h);
+    ctxt.closePath();
+    ctxt.stroke();
+};
+
+jb.bounds.prototype.set = function(left, top, width, height) {
+    this.t = top || 0;
+    this.l = left || 0;
+    this.w = width || 0;
+    this.h = height || 0;
+};
+
+jb.bounds.prototype.contain = function(x, y) {
+    return this.l <= x && this.l + this.w >= x &&
+           this.t <= y && this.t + this.h >= y;
+};
+
+jb.bounds.prototype.copy = function(dest) {
+    dest.t = this.t;
+    dest.l = this.l;
+    dest.w = this.w;
+    dest.h = this.h;
+};
+
+jb.bounds.prototype.scale = function(sx, sy) {
+    var xScale = sx || 1,
+        yScale = sy || xScale;
+
+    this.t *= yScale;
+    this.l *= xScale;
+    this.w *= xScale;
+    this.h *= yScale;
+};
+
+jb.bounds.prototype.moveTo = function(left, top) {
+    this.t = top;
+    this.l = left;
+};
+
+jb.bounds.prototype.moveBy = function(dl, dt) {
+    this.t += dt;
+    this.l += dl;
+};
+
+jb.bounds.prototype.resizeTo = function(width, height) {
+    this.w = width;
+    this.h = height;
+};
+
+jb.bounds.prototype.resizeBy = function(dw, dh) {
+    this.w += dw;
+    this.h += dh;
+};
+
+jb.bounds.prototype.intersects = function(other) {
+    var bInLeftRight = false,
+        bInTopBottom = false;
+
+    jb.assert(other, "jb.bounds.intersects: invalid 'other'!");
+
+    if (this.l < other.l) {
+        bInLeftRight = other.l <= this.l + this.w;
+    }
+    else {
+        bInLeftRight = this.l <= other.l + other.w;
+    }
+
+    if (this.t < other.t) {
+        bInTopBottom = other.t <= this.t + this.h;
+    }
+    else {
+        bInTopBottom = this.t <= other.t + other.h;
+    }
+
+    return bInLeftRight && bInTopBottom;
+};
+
+jb.bounds.prototype.intersection = function(other, result) {
+    jb.assert(other && other.isBound, "jb.bounds.intersection: invalid 'other'!");
+    jb.assert(result && result.isBound, "jb.bounds.intersection: invalid 'result'!");
+
+    if (this.l < other.l) {
+        result.l = other.l;
+        result.w = Math.min(this.l + this.w, other.l + other.w) - result.l;
+    }
+    else {
+        result.l = this.l;
+        result.w = Math.min(this.l + this.w, other.l + other.w) - result.l;
+    }
+
+    if (this.t < other.t) {
+        result.t = other.t;
+        result.h = Math.min(this.t + this.h, other.t + other.h) - result.l;
+    }
+    else {
+        result.t = this.t;
+        result.h = Math.min(this.t + this.h, other.t + other.h) - result.l;
+    }
+};
+
+////////////////////////////////////////////////////////////////////////////////
+// oooooo     oooo ooo        ooooo 
+//  `888.     .8'  `88.       .888' 
+//   `888.   .8'    888b     d'888  
+//    `888. .8'     8 Y88. .P  888  
+//     `888.8'      8  `888'   888  
+//      `888'       8    Y     888  
+//       `8'       o8o        o888o 
 // Virtual Machine /////////////////////////////////////////////////////////////
 jb.instructions     = []
 jb.bStarted         = false;
@@ -224,6 +573,14 @@ jb.timerLast = function(timerName) {
     return jb.timers[timerName] ? jb.timers[timerName].last : -1;
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// oooooo     oooo ooooo oooooooooooo oooooo   oooooo     oooo 
+//  `888.     .8'  `888' `888'     `8  `888.    `888.     .8'  
+//   `888.   .8'    888   888           `888.   .8888.   .8'   
+//    `888. .8'     888   888oooo8       `888  .8'`888. .8'    
+//     `888.8'      888   888    "        `888.8'  `888.8'     
+//      `888'       888   888       o      `888'    `888'      
+//       `8'       o888o o888ooooood8       `8'      `8'    
 // View ////////////////////////////////////////////////////////////////////////
 // Get canvas and resize to fit window.
 jb.NEWLINE = "`";
@@ -427,6 +784,14 @@ jb.printAt = function(text, newRow, newCol) {
     }
 };
 
+////////////////////////////////////////////////////////////////////////////////
+// ooooo ooooo      ooo ooooooooo.   ooooo     ooo ooooooooooooo 
+// `888' `888b.     `8' `888   `Y88. `888'     `8' 8'   888   `8 
+//  888   8 `88b.    8   888   .d88'  888       8       888      
+//  888   8   `88b.  8   888ooo88P'   888       8       888      
+//  888   8     `88b.8   888          888       8       888      
+//  888   8       `888   888          `88.    .8'       888      
+// o888o o8o        `8  o888o           `YbodP'        o888o     
 // Input ///////////////////////////////////////////////////////////////////////
 jb.normal = {last: null, down:{}};
 jb.special = {last: null, down: {}};
@@ -656,12 +1021,13 @@ jb.getClientPos = function(touch) {
     jb.pointInfo.srcElement = jb.canvas ? jb.canvas : null;
 };
 
-jb.tap = {bListening: false, x: -1, y: -1, done: false, isDoubleTap: false, lastTapTime: 0};
-jb.swipe = {bListening: false, startX: -1, startY: -1, endX: -1, endY: -1, startTime: 0, endTime: 0, done: false};
+jb.tap = {bListening: false, x: -1, y: -1, done: false, isDoubleTap: false, lastTapTime: 0, touched: null};
+jb.swipe = {bListening: false, startX: -1, startY: -1, endX: -1, endY: -1, startTime: 0, endTime: 0, touched: null, done: false};
 
 jb.listenForTap = function() {
     jb.resetTap();
     jb.tap.bListening = true;
+    jb.tap.touched = false;
 };
 
 jb.resetTap = function() {
@@ -686,6 +1052,7 @@ jb.resetSwipe = function() {
     jb.swipe.startTime = 0;
     jb.swipe.endTime = 0;
     jb.swipe.done = false;
+    jb.swipe.started = false;
     jb.swipe.bListening = false;
 };
 
@@ -724,6 +1091,7 @@ jb.gestureStart = function() {
         jb.tap.y = y;
         jb.tap.isDoubleTap = newNow - jb.tap.lastTapTime < jb.DOUBLE_TAP_INTERVAL;
         jb.tap.lastTapTime = newNow;
+        jb.tap.touched = jb.touchables.getTouched(x, y);
         jb.tap.done = true;
     }
 
@@ -733,6 +1101,8 @@ jb.gestureStart = function() {
         jb.swipe.endX = x;
         jb.swipe.endY = y;
         jb.swipe.startTime = newNow;
+        jb.swipe.touched = jb.touchables.getTouched(x, y);
+        jb.swipe.started = true;
         jb.swipe.done = false;
     }
 };
@@ -797,38 +1167,14 @@ window.addEventListener("touchstart", jb.touchStart, true);
 window.addEventListener("touchmove", jb.touchMove, true);
 window.addEventListener("touchend", jb.touchEnd, true);
 
-// RequestAnimFrame ////////////////////////////////////////////////////////////
-// http://paulirish.com/2011/requestanimationframe-for-smart-animating/
-// http://my.opera.com/emoller/blog/2011/12/20/requestanimationframe-for-smart-er-animating
- 
-// requestAnimationFrame polyfill by Erik Möller
-// fixes from Paul Irish and Tino Zijdel
- 
-(function() {
-    var lastTime = 0;
-    var vendors = ['ms', 'moz', 'webkit', 'o'];
-    for(var x = 0; x < vendors.length && !window.requestAnimationFrame; ++x) {
-        window.requestAnimationFrame = window[vendors[x]+'RequestAnimationFrame'];
-        window.cancelAnimationFrame = window[vendors[x]+'CancelAnimationFrame']
-                                   || window[vendors[x]+'CancelRequestAnimationFrame'];
-    }
- 
-    if (!window.requestAnimationFrame)
-        window.requestAnimationFrame = function(callback, element) {
-            var currTime = new Date().getTime();
-            var timeToCall = Math.max(0, 16 - (currTime - lastTime));
-            var id = window.setTimeout(function() { callback(currTime + timeToCall); },
-              timeToCall);
-            lastTime = currTime + timeToCall;
-            return id;
-        };
- 
-    if (!window.cancelAnimationFrame)
-        window.cancelAnimationFrame = function(id) {
-            clearTimeout(id);
-        };
-}());
-
+////////////////////////////////////////////////////////////////////////////////
+// oooooooooooo   .oooooo.   ooooo      ooo ooooooooooooo  .oooooo..o 
+// `888'     `8  d8P'  `Y8b  `888b.     `8' 8'   888   `8 d8P'    `Y8 
+//  888         888      888  8 `88b.    8       888      Y88bo.      
+//  888oooo8    888      888  8   `88b.  8       888       `"Y8888o.  
+//  888    "    888      888  8     `88b.8       888           `"Y88b 
+//  888         `88b    d88'  8       `888       888      oo     .d8P 
+// o888o         `Y8bood8P'  o8o        `8      o888o     8""88888P'  
 // FONTS ///////////////////////////////////////////////////////////////////////
 // Fonts are bitmapped character sets. They default to 16x16 size and can be
 // scaled in integer amounts.
@@ -3601,7 +3947,15 @@ jb.fonts = {
     }
 };
 
-// GLYPHS //////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////
+//   .oooooo.    ooooo        oooooo   oooo ooooooooo.   ooooo   ooooo  .oooooo..o 
+//  d8P'  `Y8b   `888'         `888.   .8'  `888   `Y88. `888'   `888' d8P'    `Y8 
+// 888            888           `888. .8'    888   .d88'  888     888  Y88bo.      
+// 888            888            `888.8'     888ooo88P'   888ooooo888   `"Y8888o.  
+// 888     ooooo  888             `888'      888          888     888       `"Y88b 
+// `88.    .88'   888       o      888       888          888     888  oo     .d8P 
+//  `Y8bood8P'   o888ooooood8     o888o     o888o        o888o   o888o 8""88888P'  
+// GLYPHS ////////////////////////////////////////////////////////////////////////
 // Glyphs are pre-defined images that can be used for games and such.
 // Glyphs are defined in code using an array of strings, where each
 // pair of characters represents a hexidecimal lookup into one of
@@ -3611,16 +3965,83 @@ jb.glyphs = {
         jb.glyphs.drawToContext(jb.ctxt, sizeStr, glyphName, x, y, scaleX, scaleY);
     },
 
+    // The top and left values will represent offsets from (0, 0) at
+    // which the bounds begin.
+    getBounds: function(sizeStr, glyphName, scaleX, scaleY, result) {
+        var glyphsAtSize = jb.glyphs[sizeStr],
+            glyphData = glyphsAtSize ? glyphsAtSize[glyphName] : null,
+            sx = scaleX || 1,
+            sy = scaleY || 1,
+            key = "" + scaleX + "x" + scaleY,
+            xMin = Number.MAX_SAFE_INTEGER,
+            yMin = Number.MAX_SAFE_INTEGER,
+            xMax = 0,
+            yMax = 0,
+            iRow = 0,
+            iCol = 0,
+            colStart = 0,
+            colEnd = 0,
+            dCol = 0,
+            rowStart = 0,
+            rowEnd = 0,
+            dRow = 0,
+            pixelVal;
+
+        if (glyphData) {
+            if (!glyphData.defaultBounds) {
+                if (glyphData.pixelData) {
+                    rowStart = sy > 0 ? 0 : glyphData.pixelData.length - 1;
+                    rowEnd = sy > 0 ? glyphData.pixelData.length : -1;
+                    dRow = sy > 0 ? 1 : -1;
+                    colStart = sx > 0 ? 0 : glyphData.pixelData[0].length - 2;
+                    colEnd = sx > 0 ? glyphData.pixelData[0].length : -1;
+                    dCol = sx > 0 ? 2 : -2;
+
+                    iRow = rowStart;
+                    do {
+                        iCol = colStart;
+                        do {
+                            pixelVal = parseInt("" + glyphData.pixelData[iRow][iCol] + glyphData.pixelData[iRow][iCol + 1]);
+                            if (!isNaN(pixelVal)) {
+                                if (iRow < yMin) {
+                                    yMin = iRow;
+                                }
+                                else if (iRow > yMax) {
+                                    yMax = iRow;
+                                }
+
+                                if (iCol < xMin) {
+                                    xMin = iCol;
+                                }
+                                else if (iCol > xMax) {
+                                    xMax = iCol;
+                                }
+                            }
+                            iCol += dCol;
+                        } while (iCol !== colEnd)
+
+                        iRow += dRow;
+                    } while (iRow !== rowEnd)
+
+                    glyphData.defaultBounds = new jb.bounds(xMin, yMin, (xMax - xMin) / 2, yMax - yMin);
+                }
+            }
+
+            glyphData.defaultBounds.copy(result);
+            result.scale(sx, sy);
+        }
+    },
+
     drawToContext: function(ctxt, sizeStr, glyphName, x, y, scaleX, scaleY) {
         var glyphsAtSize = jb.glyphs[sizeStr],
             glyphData = glyphsAtSize ? glyphsAtSize[glyphName] : null,
             sx = scaleX || 1,
             sy = scaleY || 1,
-            key = "" + scaleX + "x" + scaleY;
+            key = "" + sx + "x" + sy;
 
         if (jb.ctxt && glyphData) {
             if (!glyphData.image || !glyphData.image[key]) {
-                jb.glyphs.init(sizeStr, glyphName, key, scaleX, scaleY);
+                jb.glyphs.init(sizeStr, glyphName, key, sx, sx);
             }
 
             ctxt.drawImage(glyphData.image[key], x, y);
@@ -3705,6 +4126,7 @@ jb.glyphs = {
     "8x8": {
         empty: {
             image: null,   // Built when first instance is created
+            defaultBounds: null,    // Built when queried
             pixelData: [
                         ".,.,.,.,.,.,.,.,",
                         ".,.,.,.,.,.,.,.,",
@@ -3718,6 +4140,7 @@ jb.glyphs = {
         },
         bullet01: {
             image: null,   // Built when first instance is created
+            defaultBounds: null,    // Built when queried
             pixelData: [
                         ".,.,.,.,.,.,.,.,",
                         ".,.,.,.,.,.,.,.,",
@@ -3731,6 +4154,7 @@ jb.glyphs = {
         },
         missile01up: {
             image: null,   // Built when first instance is created
+            defaultBounds: null,    // Built when queried
             pixelData: [
                         ".,.,.,.,01.,.,.,",
                         ".,.,.,010101.,.,",
@@ -3744,6 +4168,7 @@ jb.glyphs = {
         },
          missile01up2: {
             image: null,   // Built when first instance is created
+            defaultBounds: null,    // Built when queried
             pixelData: [
                         ".,.,.,.,01.,.,.,",
                         ".,.,.,010101.,.,",
@@ -3757,6 +4182,7 @@ jb.glyphs = {
         },
         torpedoLeft: {
             image: null,   // Built when first instance is created
+            defaultBounds: null,    // Built when queried
             pixelData: [
                         ".,.,.,.,.,.,.,.,",
                         ".,.,.,.,.,.,.,.,",
@@ -3778,6 +4204,7 @@ jb.glyphs = {
 
         empty: {
             image: null,   // Built when first instance is created
+            defaultBounds: null,    // Built when queried
             pixelData: [
                         ".,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,",
                         ".,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,",
@@ -3799,6 +4226,7 @@ jb.glyphs = {
         },
         cloud01: {
             image: null,   // Built when first instance is created
+            defaultBounds: null,    // Built when queried
             pixelData: [
                         ".,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,",
                         ".,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,",
@@ -3820,6 +4248,7 @@ jb.glyphs = {
         },
         cloud02: {
             image: null,   // Built when first instance is created
+            defaultBounds: null,    // Built when queried
             pixelData: [
                         ".,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,",
                         ".,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,",
@@ -3841,6 +4270,7 @@ jb.glyphs = {
         },
         submarineLeft: {
             image: null,   // Built when first instance is created
+            defaultBounds: null,    // Built when queried
             pixelData: [
                         ".,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,",
                         ".,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,",
@@ -3862,6 +4292,7 @@ jb.glyphs = {
         },
         destroyerRight: {  
             image: null,   // Built when first instance is created
+            defaultBounds: null,    // Built when queried
             pixelData: [
                         ".,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,",
                         ".,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,",
@@ -3883,6 +4314,7 @@ jb.glyphs = {
          },
          knight: {  
             image: null,   // Built when first instance is created
+            defaultBounds: null,    // Built when queried
             pixelData: [
                         ".,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,",
                         ".,.,.,.,.,.,020202.,.,.,.,.,.,.,",
@@ -3904,6 +4336,7 @@ jb.glyphs = {
         },
          mage: {
             image: null,   // Built when first instance is created
+            defaultBounds: null,    // Built when queried
             pixelData: [
                         ".,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,",
                         ".,.,.,.,.,.,.,.,0A.,.,.,.,.,.,.,",
@@ -3925,6 +4358,7 @@ jb.glyphs = {
         },
         tree01: {
             image: null,   // Built when first instance is created
+            defaultBounds: null,    // Built when queried
             pixelData: [
                         ".,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,",
                         ".,.,.,.,.,.,.,.,05.,.,.,.,.,.,.,",
@@ -3946,6 +4380,7 @@ jb.glyphs = {
         },
         brickRight: {
             image: null,   // Built when first instance is created
+            defaultBounds: null,    // Built when queried
             pixelData: [
                         ".,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,",
                         ".,03030303030303.,.,.,.,.,.,.,.,",
@@ -3967,6 +4402,7 @@ jb.glyphs = {
         },
         brickWedgeTopLeft: {
             image: null,   // Built when first instance is created
+            defaultBounds: null,    // Built when queried
             pixelData: [
                         ".,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,",
                         ".,.,.,.,.,.,.,.,.,.,.,.,.,.,.,03",
@@ -3988,6 +4424,7 @@ jb.glyphs = {
         },
         brickWedgeTopRight: {
             image: null,   // Built when first instance is created
+            defaultBounds: null,    // Built when queried
             pixelData: [
                         ".,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,",
                         ".,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,",
@@ -4009,6 +4446,7 @@ jb.glyphs = {
         },
         brickWedgeBottomLeft: {
             image: null,   // Built when first instance is created
+            defaultBounds: null,    // Built when queried
             pixelData: [
                         ".,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,",
                         ".,.,030303030303.,03030303030303",
@@ -4030,6 +4468,7 @@ jb.glyphs = {
         },
         brickWedgeBottomRight: {
             image: null,   // Built when first instance is created
+            defaultBounds: null,    // Built when queried
             pixelData: [
                         ".,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,",
                         ".,03030303030303.,0303030303.,.,",
@@ -4051,6 +4490,7 @@ jb.glyphs = {
         },
         brickBattlementCenter: {
             image: null,   // Built when first instance is created
+            defaultBounds: null,    // Built when queried
             pixelData: [
                         ".,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,",
                         ".,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,",
@@ -4072,6 +4512,7 @@ jb.glyphs = {
         },
         brickBattlementLeft: {
             image: null,   // Built when first instance is created
+            defaultBounds: null,    // Built when queried
             pixelData: [
                         ".,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,",
                         ".,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,",
@@ -4093,6 +4534,7 @@ jb.glyphs = {
         },
         brickBattlementRight: {
             image: null,   // Built when first instance is created
+            defaultBounds: null,    // Built when queried
             pixelData: [
                         ".,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,",
                         ".,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,",
@@ -4114,6 +4556,7 @@ jb.glyphs = {
         },
         brickCenter: {
             image: null,   // Built when first instance is created
+            defaultBounds: null,    // Built when queried
             pixelData: [
                         ".,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,",
                         ".,03030303030303.,03030303030303",
@@ -4135,6 +4578,7 @@ jb.glyphs = {
         },
         brickCenterLeft: {
             image: null,   // Built when first instance is created
+            defaultBounds: null,    // Built when queried
             pixelData: [
                         ".,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,",
                         ".,03030303030303.,03030303030303",
@@ -4156,6 +4600,7 @@ jb.glyphs = {
         },
          brickCenterWindow: {
             image: null,   // Built when first instance is created
+            defaultBounds: null,    // Built when queried
             pixelData: [
                         ".,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,",
                         ".,03030303030303.,03030303030303",
@@ -4177,6 +4622,7 @@ jb.glyphs = {
         },
         brickCenterDoor: {
             image: null,   // Built when first instance is created
+            defaultBounds: null,    // Built when queried
             pixelData: [
                         ".,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,",
                         ".,030303030303030303030303030303",
@@ -4198,6 +4644,7 @@ jb.glyphs = {
         },
         brickCenterDoorway: {
             image: null,   // Built when first instance is created
+            defaultBounds: null,    // Built when queried
             pixelData: [
                         ".,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,",
                         ".,030303030303030303030303030303",
@@ -4219,6 +4666,7 @@ jb.glyphs = {
         },
         brickLeft: {
             image: null,   // Built when first instance is created
+            defaultBounds: null,    // Built when queried
             pixelData: [
                         ".,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,",
                         ".,.,.,.,.,.,.,.,.,03030303030303",
@@ -4240,6 +4688,7 @@ jb.glyphs = {
         },
         brickTop: {
             image: null,   // Built when first instance is created
+            defaultBounds: null,    // Built when queried
             pixelData: [
                         ".,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,",
                         ".,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,",
@@ -4261,6 +4710,7 @@ jb.glyphs = {
         },
         brickMid: {
             image: null,   // Built when first instance is created
+            defaultBounds: null,    // Built when queried
             pixelData: [
                         ".,030303.,030303.,030303.,030303",
                         ".,030303.,030303.,030303.,030303",
@@ -4282,6 +4732,7 @@ jb.glyphs = {
         },
         brickMidWindow: {
             image: null,   // Built when first instance is created
+            defaultBounds: null,    // Built when queried
             pixelData: [
                         ".,030303.,030303.,030303.,030303",
                         ".,030303.,030303.,030303.,030303",
@@ -4303,6 +4754,7 @@ jb.glyphs = {
         },
          brickMidDoor: {
             image: null,   // Built when first instance is created
+            defaultBounds: null,    // Built when queried
             pixelData: [
                         ".,030303.,030303.,030303.,030303",
                         ".,030303.,0F0F0F0F0F0F0F.,030303",
@@ -4324,6 +4776,7 @@ jb.glyphs = {
         },
           brickMidDoorway: {
             image: null,   // Built when first instance is created
+            defaultBounds: null,    // Built when queried
             pixelData: [
                         ".,030303.,030303.,030303.,030303",
                         ".,030303.,.,.,.,.,.,.,.,.,030303",
@@ -4345,6 +4798,7 @@ jb.glyphs = {
         },
         brickBottom: {
             image: null,   // Built when first instance is created
+            defaultBounds: null,    // Built when queried
             pixelData: [
                         ".,030303.,030303.,030303.,030303",
                         ".,030303.,030303.,030303.,030303",
@@ -4366,6 +4820,7 @@ jb.glyphs = {
         },
         brickTopLeft: {
             image: null,   // Built when first instance is created
+            defaultBounds: null,    // Built when queried
             pixelData: [
                         ".,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,",
                         ".,03030303030303.,03030303030303",
@@ -4387,6 +4842,7 @@ jb.glyphs = {
         },
         brickTopRight: {
             image: null,   // Built when first instance is created
+            defaultBounds: null,    // Built when queried
             pixelData: [
                         ".,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,",
                         ".,03030303030303.,03030303030303",
@@ -4408,6 +4864,7 @@ jb.glyphs = {
         },
         brickBottomLeft: {
             image: null,   // Built when first instance is created
+            defaultBounds: null,    // Built when queried
             pixelData: [
                         ".,030303.,030303.,030303.,030303",
                         ".,030303.,030303.,030303.,030303",
@@ -4429,6 +4886,7 @@ jb.glyphs = {
         },
         brickBottomRight: {
             image: null,   // Built when first instance is created
+            defaultBounds: null,    // Built when queried
             pixelData: [
                         ".,030303.,030303.,030303.,030303",
                         "03030303.,030303.,030303.,030303",
@@ -4453,6 +4911,7 @@ jb.glyphs = {
     "32x32": {
         empty: {
             image: null,   // Built when first instance is created
+            defaultBounds: null,    // Built when queried
             pixelData: [
                         ".,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,",
                         ".,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,",

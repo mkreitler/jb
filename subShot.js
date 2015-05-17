@@ -1,34 +1,3 @@
-jb.programTest = {
-    start: function() {
-        jb.print("Waiting for tap...");
-        jb.gosub("startWaitForTap");
-    },
-
-    mid: function() {
-        jb.print("done!`");
-        jb.print("Waiting for another tap...");
-        jb.gosub("startWaitForTap");
-    },
-
-    end: function() {
-        jb.print("done!`");
-        jb.end();
-    },
-
-    ///////////////////////////////////////////////////////////////////////////
-    startWaitForTap: function() {
-        jb.listenForTap();
-    },
-
-    do_waitForTap: function() {
-        jb.until(jb.tap.done);
-    },
-
-    endWaitForTap: function() {
-        jb.end();
-    },
-};
-
 // Create an object that will be the game:
 jb.program = {
     // Variables and data //////////////////////////////////////////////////////
