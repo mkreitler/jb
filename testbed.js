@@ -1,3 +1,44 @@
+///////////////////////////////////////////////////////////////////////////////
+// Resources Test
+///////////////////////////////////////////////////////////////////////////////
+jb.program = {
+    spriteSheet: null,
+    sound: null,
+
+    start: function() {
+        this.spriteSheet = resources.loadImage("oryx_16bit_scifi_vehicles_trans.png", "./res/sf/");
+        this.sound = resources.loadSound("sound.mp3");
+    },
+
+    do_waitForResources: function() {
+        jb.until(resources.loadComplete());
+    },
+
+    checkResources: function() {
+        if (!resources.loadSuccessful()) {
+            goto("stop");
+        }
+        else {
+            jb.sound.play(this.sound, 1.0);
+            jb.listenForTap();
+        }
+    },
+
+    do_displayBitmap: function() {
+        jb.drawImageNormalized(this.spriteSheet, 0.5, 0.5);
+
+        jb.until(jb.tap.done);
+    },
+
+    stop: function() {
+        jb.print("Resource load failed.`");
+        jb.end();
+    },
+};
+
+///////////////////////////////////////////////////////////////////////////////
+// Gosub Test
+///////////////////////////////////////////////////////////////////////////////
 jb.programTest = {
     start: function() {
         jb.print("Waiting for tap...");
@@ -29,7 +70,10 @@ jb.programTest = {
     },
 };
 
-jb.program = {
+///////////////////////////////////////////////////////////////////////////////
+// Touch Test
+///////////////////////////////////////////////////////////////////////////////
+jb.programTouchTest = {
     touchKnight: null,
 
     setup: function() {
@@ -37,20 +81,18 @@ jb.program = {
             // Template name
             "testKnight",
 
-            // Template constructor
-            function(x, y) {
-                // Template data
-                this.x = x;
-                this.y = y;
-                this.size = "16x16";
-                this.glyph = "knight";
+            // Template data
+            {
+                x: 0,
+                y: 0,
+                size: "16x16",
+                glyph: "knight"
             },
 
             // Template actions and shared data
             {
-                onSpawned: function() {
+                onCreate: function() {
                     jb.glyphs.getBounds(this.size, this.glyph, 2, 2, this.bounds);
-                    this.bounds.moveBy(this.x, this.y);
                 },
 
                 moveTo: function(x, y) {
@@ -67,13 +109,13 @@ jb.program = {
                     this.y += dy;
                     this.bounds.moveBy(dx, dy);
                 }
-            },
-
-            // Included components
-            "touchable"
+            }
         );
 
-        this.touchKnight = blueprints.build("testKnight", 100, 50);
+        blueprints.make("testKnight", "touchable");
+
+        this.touchKnight = blueprints.build("testKnight");
+        this.touchKnight.moveTo(100, 50);
 
         jb.listenForSwipe();
     },

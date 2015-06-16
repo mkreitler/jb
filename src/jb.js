@@ -9,8 +9,94 @@ jb = {
     }
 };
 
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// ooooooooo.   oooooooooooo  .oooooo.o   .oooooo.   ooooo     ooo ooooooooo.     .oooooo.   oooooooooooo  .oooooo.o 
+// `888   `Y88. `888'     `8 d8P'    `Y8  d8P'  `Y8b  `888'     `8' `888   `Y88.  d8P'  `Y8b  `888'     `8 d8P'    `Y8 
+//  888   .d88'  888         Y88bo.      888      888  888       8   888   .d88' 888           888         Y88bo.      
+//  888ooo88P'   888oooo8     `"Y8888o.  888      888  888       8   888ooo88P'  888           888oooo8     `"Y8888o.  
+//  888`88b.     888    "         `"Y88b 888      888  888       8   888`88b.    888           888    "         `"Y88b 
+//  888  `88b.   888       o oo     .d8P `88b    d88'  `88.    .8'   888  `88b.  `88b    ooo   888       o oo     .d8P 
+// o888o  o888o o888ooooood8 8""88888P'   `Y8bood8P'     `YbodP'    o888o  o888o  `Y8bood8P'  o888ooooood8 8""88888P'  
+// Resources /////////////////////////////////////////////////////////////////////////////////////////////////////////
+resources = {
+  resourcesPending: 0,
+  resourcesLoaded: 0,
+  resourcesRequested: 0,
+  bResourceLoadSuccessful: true,
+
+  incPendingCount: function() {
+    resources.resourcesPending += 1;
+    resources.resourcesRequested += 1;
+  },
+
+  incLoadedCount: function(bLoadSuccessful) {
+    resources.resourcesLoaded += 1;
+    resources.resourcesPending -= 1;
+
+    resources.bResourceLoadSuccessful &= bLoadSuccessful;
+  },
+
+  getLoadProgress: function() {
+    var completion = resources.resourcesRequested > 0 ? resources.resourcesLoaded / resources.resourcesRequested : 1.0;
+
+    if (!resources.bResourceLoadSuccessful) {
+      completion *= -1.0;
+    }
+
+    return completion;
+  },
+
+  getLoadedCount: function() {
+    return resources.resourcesLoaded;
+  },
+
+  loadComplete: function() {
+    return resources.resourcesPending === 0 && resources.resourcesLoaded === resources.resourcesRequested;
+  },
+
+  loadSuccessful: function() {
+    return resources.bResourceLoadSuccessful;
+  },
+
+  loadImage: function(imageURL, imagePath) {
+    var image = new Image(),
+        fullURL = (imagePath || "./res/images/") + imageURL;
+
+    resources.incPendingCount();
+  
+    image.onload = function() {
+      resources.incLoadedCount(true);
+    }
+    
+    image.onerror = function() {
+      resources.incLoadedCount(false);
+    }
+  
+    image.src = fullURL;
+  
+    return image;
+  },
+  
+  loadSound: function(soundURL, resourcePath, nChannels, repeatDelaySec) {
+    var path = resourcePath || "./res/sounds/";
+
+    soundURL = path + soundURL;
+
+    resources.incPendingCount();
+
+    return jb.sound.load(soundURL,
+        function() {
+          resources.incLoadedCount(true);
+        },
+        function() {
+          resources.incLoadedCount(false);
+        },
+        nChannels, repeatDelaySec);
+  },
+};
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// oooooooooo.  ooooo        ooooo     ooo oooooooooooo ooooooooo.   ooooooooo.   ooooo ooooo      ooo ooooooooooooo  .oooooo..o 
+// oooooooooo.  ooooo        ooooo     ooo oooooooooooo ooooooooo.   ooooooooo.   ooooo ooooo      ooo ooooooooooooo  .oooooo.o 
 // `888'   `Y8b `888'        `888'     `8' `888'     `8 `888   `Y88. `888   `Y88. `888' `888b.     `8' 8'   888   `8 d8P'    `Y8 
 //  888     888  888          888       8   888          888   .d88'  888   .d88'  888   8 `88b.    8       888      Y88bo.      
 //  888oooo888'  888          888       8   888oooo8     888ooo88P'   888ooo88P'   888   8   `88b.  8       888       `"Y8888o.  
@@ -22,69 +108,73 @@ jb = {
 blueprints = {
     mixins: {},
 
-    make: function(proto, extension) {
-        var mixin = blueprints.mixins[extension];
+    make: function(blueprint, extension) {
+        var key = null,
+            bpData = blueprints[blueprint],
+            mixin = blueprints.mixins[extension],
+            proto = bpData ? bpData.proto : null;
 
-        if (proto && extension && blueprints.mixins[extension]) {
-            jb.assert(mixin.make, "Mixin " + extension + " must define a 'make' function!");
-            mixin.make(proto);
+        if (bpData && mixin && proto) {
+            for (key in mixin) {
+                if (key.indexOf(extension) >= 0) {
+                    proto[key] = mixin[key];
+                }
+            }
+
+            proto._components.push(extension);
         }
     },
 
-    draft: function(name, dataFn, classObj) {
-        var args = Array.prototype.slice.call(arguments);
+    draft: function(name, dataObj, classObj) {
+        var args = Array.prototype.slice.call(arguments),
+            propObj = {},
+            key = null;
 
         if (!blueprints[name]) {
-            classObj.components = [];
+            classObj._components = [];
             classObj.destroy = function() {
                 var i = 0;
 
-                for (i=0; i<this.components.length; ++i) {
-                    blueprints.mixins[this.components[i]].destroy(this);
+                for (i=0; i<this._components.length; ++i) {
+                    blueprints.mixins[this._components[i]].destroy(this);
                 }
             }
 
-            // Mix in extra component functionality.
-            for (i=3; i<args.length; ++i) {
-                blueprints.make(classObj, args[i]);
+            for (key in dataObj) {
+                propObj[key] = {value: dataObj[key], writable: true, enumerable: true, configurable: true};
             }
 
-            classObj.constructor = dataFn;
-            dataFn.prototype = classObj;
-
-            blueprints[name] = dataFn;
+            blueprints[name] = {data: propObj, proto: classObj};
         }
     },
 
-    build: function() {
-        var args = Array.prototype.slice.call(arguments),
-            dataFn = args && args.length > 0 ? blueprints[arguments[0]] : null,
-            blueprint = dataFn ? Function.prototype.bind.apply(dataFn, arguments) : null,
-            instance = null,
-            i = 0;
+    build: function(name) {
+        var instance = null,
+            template = blueprints[name],
+            i = 0,
+            mixin = null;
 
-            if (blueprint) {
-                blueprint.prototype = dataFn.prototype;
-            }
+        if (template) {
+            instance = Object.create(template.proto, template.data);
 
-            instance = blueprint ? new blueprint : null;
-            if (instance) {
-                instance.selfProto = dataFn.prototype;
-                instance.destroy = dataFn.prototype.destroy.bind(this);
-
-                for (i=0; i<instance.components.length; ++i) {
-                    blueprints.mixins[instance.components[i]].spawn(instance);
+            for (i=0; i<template.proto._components.length; ++i) {
+                mixin = blueprints.mixins[template.proto._components[i]];
+                if (mixin) {
+                    mixin.spawn(instance);
                 }
-
-                instance.onSpawned();
             }
+
+            if (instance.onCreate) {
+                instance.onCreate();
+            }
+        }
 
         return instance;
     }
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-//   .oooooo.     .oooooo.   ooo        ooooo ooooooooo.     .oooooo.   ooooo      ooo oooooooooooo ooooo      ooo ooooooooooooo  .oooooo..o 
+//   .oooooo.     .oooooo.   ooo        ooooo ooooooooo.     .oooooo.   ooooo      ooo oooooooooooo ooooo      ooo ooooooooooooo  .oooooo.o 
 //  d8P'  `Y8b   d8P'  `Y8b  `88.       .888' `888   `Y88.  d8P'  `Y8b  `888b.     `8' `888'     `8 `888b.     `8' 8'   888   `8 d8P'    `Y8 
 // 888          888      888  888b     d'888   888   .d88' 888      888  8 `88b.    8   888          8 `88b.    8       888      Y88bo.      
 // 888          888      888  8 Y88. .P  888   888ooo88P'  888      888  8   `88b.  8   888oooo8     8   `88b.  8       888       `"Y8888o.  
@@ -95,22 +185,7 @@ blueprints = {
 // All components must define 'make', 'spawn', and 'destroy' functions in order
 // to be correctly added/removed by the 'blueprint' object.
 jb.touchables = {
-    componentID: "touchable",
     instances: [],
-
-    // Adds 'touchable' functionality to prototype object received through
-    // the 'proto' argument.
-    make: function(proto) {
-        var key = null;
-
-        for (key in jb.touchables) {
-            if (key.indexOf(jb.touchables.componentID) >= 0) {
-                proto[key] = jb.touchables[key];
-            }
-        }
-
-        proto.components.push(jb.touchables.componentID);
-    },
 
     makeInstance: function(instance) {
         if (!instance.bounds) {
@@ -166,13 +241,17 @@ jb.touchables = {
     },
 
     // Mixins ---------------------------------------------
-    touchablesLayer: -1,
+    // All "mixin" functions must start with the prefix
+    // "touchable" in order to flag their inclusion into
+    // the specified prototypes.
+    // e.g.:
+    //     touchableGetLayer: function() { .. },
 
 };
-blueprints.mixins[jb.touchables.componentID] = jb.touchables;
+blueprints.mixins["touchable"] = jb.touchables;
 
 /////////////////////////////////////////////////////////////////////////////////////////////
-// ooooo   ooooo oooooooooooo ooooo        ooooooooo.   oooooooooooo ooooooooo.    .oooooo..o 
+// ooooo   ooooo oooooooooooo ooooo        ooooooooo.   oooooooooooo ooooooooo.    .oooooo.o 
 // `888'   `888' `888'     `8 `888'        `888   `Y88. `888'     `8 `888   `Y88. d8P'    `Y8 
 //  888     888   888          888          888   .d88'  888          888   .d88' Y88bo.      
 //  888ooooo888   888oooo8     888          888ooo88P'   888oooo8     888ooo88P'   `"Y8888o.  
@@ -221,9 +300,159 @@ jb.removeFast = function(theArray, theElement) {
         };
 }());
 
+// Math ///////////////////////////////////////////////////////////////////////
+// Cubic Splines --------------------------------------------------------------
+jb.MathEx = {};
+jb.MathEx.cubic = function(a, b, c, d, u) {
+   this.a = a;
+   this.b = b;
+   this.c = c;
+   this.d = d;
+};
+
+jb.MathEx.cubic.prototype.getValueAt = function(u){
+  return (((this.d * u) + this.c) * u + this.b) * u + this.a;
+};
+
+jb.MathEx.calcNaturalCubic = function(values, component, cubics) {
+   var num = values.length - 1;
+   var gamma = []; // new float[num+1];
+   var delta = []; // new float[num+1];
+   var D = []; // new float[num+1];
+   var i = 0;
+
+   /*
+        We solve the equation
+       [2 1       ] [D[0]]   [3(x[1] - x[0])  ]
+       |1 4 1     | |D[1]|   |3(x[2] - x[0])  |
+       |  1 4 1   | | .  | = |      .         |
+       |    ..... | | .  |   |      .         |
+       |     1 4 1| | .  |   |3(x[n] - x[n-2])|
+       [       1 2] [D[n]]   [3(x[n] - x[n-1])]
+       
+       by using row operations to convert the matrix to upper triangular
+       and then back sustitution.  The D[i] are the derivatives at the knots.
+   */
+   gamma.push(1.0 / 2.0);
+   for(i=1; i< num; i++) {
+      gamma.push(1.0/(4.0 - gamma[i-1]));
+   }
+   gamma.push(1.0/(2.0 - gamma[num-1]));
+
+   p0 = values[0][component];
+   p1 = values[1][component];
+         
+   delta.push(3.0 * (p1 - p0) * gamma[0]);
+   for(i=1; i< num; i++) {
+      p0 = values[i-1][component];
+      p1 = values[i+1][component];
+      delta.push((3.0 * (p1 - p0) - delta[i - 1]) * gamma[i]);
+   }
+   p0 = values[num-1][component];
+   p1 = values[num][component];
+
+   delta.push((3.0 * (p1 - p0) - delta[num - 1]) * gamma[num]);
+
+   D.unshift(delta[num]);
+   for(i=num-1; i >= 0; i--) {
+      D.unshift(delta[i] - gamma[i] * D[0]);
+   }
+
+   /*
+        now compute the coefficients of the cubics 
+   */
+   cubics.length = 0;
+
+   for(i=0; i<num; i++) {
+      p0 = values[i][component];
+      p1 = values[i+1][component];
+
+      cubics.push(new jb.MathEx.cubic(
+                     p0, 
+                     D[i], 
+                     3*(p1 - p0) - 2*D[i] - D[i+1],
+                     2*(p0 - p1) +   D[i] + D[i+1]
+                   )
+               );
+   }
+};
+
+jb.MathEx.Spline2D = function() {
+   this.points = [];
+   this.xCubics = [];
+   this.yCubics = [];
+};
+
+jb.MathEx.Spline2D.prototype.reset = function() {
+  this.points.length = 0;
+  this.xCubics.length = 0;
+  this.yCubics.length = 0;
+};
+ 
+jb.MathEx.Spline2D.prototype.addPoint = function(point) {
+   this.points.push(point);
+};
+ 
+jb.MathEx.Spline2D.prototype.getPoints = function() {
+   return this.points;
+};
+ 
+jb.MathEx.Spline2D.prototype.calcSpline = function() {
+   jb.MathEx.calcNaturalCubic(this.points, "x", this.xCubics);
+   jb.MathEx.calcNaturalCubic(this.points, "y", this.yCubics);
+};
+ 
+jb.MathEx.Spline2D.prototype.getPoint = function(position) {
+   position = position * this.xCubics.length; // extrapolate to the arraysize
+    
+   var cubicNum = Math.floor(position);
+   var cubicPos = (position - cubicNum);
+    
+   return {x: this.xCubics[cubicNum].getValueAt(cubicPos),
+           y: this.yCubics[cubicNum].getValueAt(cubicPos)};
+};
+
+jb.MathEx.Spline3D = function() {
+   this.points = [];
+   this.xCubics = [];
+   this.yCubics = [];
+   this.zCubics = [];
+};
+
+jb.MathEx.Spline3D.prototype.reset = function() {
+ this.points.length = 0;
+ this.xCubics.length = 0;
+ this.yCubics.length = 0;
+ this.zCubics.length = 0;
+};
+
+jb.MathEx.Spline3D.prototype.addPoint = function() {
+  this.points.push(point);
+};
+
+jb.MathEx.Spline3D.prototype.getPoints = function() {
+  return this.points;
+};
+
+jb.MathEx.Spline3D.prototype.calcSpline = function() {
+  jb.MathEx.calcNaturalCubic(this.points, "x", this.xCubics);
+  jb.MathEx.calcNaturalCubic(this.points, "y", this.yCubics);
+  jb.MathEx.calcNaturalCubic(this.points, "z", this.zCubics);
+};
+
+jb.MathEx.Spline3D.prototype.getPoint = function(position) {
+  position = position * this.xCubics.length; // extrapolate to the arraysize
+  
+  var cubicNum = Math.floor(position);
+  var cubicPos = (position - cubicNum);
+  
+  return {x: this.xCubics[cubicNum].getValueAt(cubicPos),
+          y: this.yCubics[cubicNum].getValueAt(cubicPos),
+          z: this.zCubics[cubicNum].getValueAt(cubicPos)};
+};
 
 ///////////////////////////////////////////////////////////////////////////////
-// ooooooooooooo oooooo   oooo ooooooooo.   oooooooooooo  .oooooo..o 
+// ooooooooooooo oooooo   oooo ooooooooo.   oooooooooooo  .oooooo.o 
 // 8'   888   `8  `888.   .8'  `888   `Y88. `888'     `8 d8P'    `Y8 
 //      888        `888. .8'    888   .d88'  888         Y88bo.      
 //      888         `888.8'     888ooo88P'   888oooo8     `"Y8888o.  
@@ -623,6 +852,17 @@ jb.create = function() {
 
     jb.ctxt.textBaseline = "top";
     jb.resize();
+};
+jb.drawImageNormalized = function(image, nx, ny, anchorX, anchorY) {
+    var x = nx * jb.canvas.width,
+        y = ny * jb.canvas.height,
+        ax = anchorX || 0.5,
+        ay = anchorY || 0.5;
+
+    x = Math.round(x - ax * image.width);
+    y = Math.round(y - ay * image.height);
+
+    jb.ctxt.drawImage(image, x, y);
 };
 jb.resetBlink = function() {
     jb.blinkTimer = 0;
@@ -1168,7 +1408,7 @@ window.addEventListener("touchmove", jb.touchMove, true);
 window.addEventListener("touchend", jb.touchEnd, true);
 
 ////////////////////////////////////////////////////////////////////////////////
-// oooooooooooo   .oooooo.   ooooo      ooo ooooooooooooo  .oooooo..o 
+// oooooooooooo   .oooooo.   ooooo      ooo ooooooooooooo  .oooooo.o 
 // `888'     `8  d8P'  `Y8b  `888b.     `8' 8'   888   `8 d8P'    `Y8 
 //  888         888      888  8 `88b.    8       888      Y88bo.      
 //  888oooo8    888      888  8   `88b.  8       888       `"Y8888o.  
@@ -3946,9 +4186,8 @@ jb.fonts = {
         },
     }
 };
-
 //////////////////////////////////////////////////////////////////////////////////
-//   .oooooo.    ooooo        oooooo   oooo ooooooooo.   ooooo   ooooo  .oooooo..o 
+//   .oooooo.    ooooo        oooooo   oooo ooooooooo.   ooooo   ooooo  .oooooo.o 
 //  d8P'  `Y8b   `888'         `888.   .8'  `888   `Y88. `888'   `888' d8P'    `Y8 
 // 888            888           `888. .8'    888   .d88'  888     888  Y88bo.      
 // 888            888            `888.8'     888ooo88P'   888ooooo888   `"Y8888o.  
@@ -4481,7 +4720,7 @@ jb.glyphs = {
                         ".,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,",
                         ".,0303030303.,.,.,.,.,.,.,.,.,.,",
                         ".,03030303.,.,.,.,.,.,.,.,.,.,.,",
-                        ".,030303.,.,.,.,.,.,.,.,.,.,..,,",
+                        ".,030303.,.,.,.,.,.,.,.,.,.,.,,",
                         ".,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,",
                         "0303.,.,.,.,.,.,.,.,.,.,.,.,.,.,",
                         "03.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,",
@@ -4552,6 +4791,50 @@ jb.glyphs = {
                         "03030303.,03030303030303.,.,.,.,",
                         "03030303.,03030303030303.,.,.,.,",
                         "03030303.,03030303030303.,.,.,.,",
+           ],
+        },
+        brickLeftPoint: {
+            image: null,   // Built when first instance is created
+            defaultBounds: null,    // Built when queried
+            pixelData: [
+                        ".,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,",
+                        ".,03.,.,.,.,.,.,.,.,.,.,.,.,.,.,",
+                        ".,0303.,.,.,.,.,.,.,.,.,.,.,.,.,",
+                        ".,030303.,.,.,.,.,.,.,.,.,.,.,.,",
+                        ".,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,",
+                        "03030303.,03.,.,.,.,.,.,.,.,.,.,",
+                        "03030303.,0303.,.,.,.,.,.,.,.,.,",
+                        "03030303.,030303.,.,.,.,.,.,.,.,",
+                        ".,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,",
+                        ".,030303030303.,.,.,.,.,.,.,.,.,",
+                        ".,0303030303.,.,.,.,.,.,.,.,.,.,",
+                        ".,03030303.,.,.,.,.,.,.,.,.,.,.,",
+                        ".,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,",
+                        "030303.,.,.,.,.,.,.,.,.,.,.,.,.,",
+                        "0303.,.,.,.,.,.,.,.,.,.,.,.,.,.,",
+                        ".,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,",
+           ],
+        },
+        brickRightPoint: {
+            image: null,   // Built when first instance is created
+            defaultBounds: null,    // Built when queried
+            pixelData: [
+                        ".,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,",
+                        ".,.,.,.,.,.,.,.,.,.,.,.,.,.,.,03",
+                        ".,.,.,.,.,.,.,.,.,.,.,.,.,.,0303",
+                        ".,.,.,.,.,.,.,.,.,.,.,.,.,030303",
+                        ".,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,",
+                        ".,.,.,.,.,.,.,.,.,.,.,03.,030303",
+                        ".,.,.,.,.,.,.,.,.,.,0303.,030303",
+                        ".,.,.,.,.,.,.,.,.,030303.,030303",
+                        ".,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,",
+                        ".,.,.,.,.,.,.,.,.,.,030303030303",
+                        ".,.,.,.,.,.,.,.,.,.,.,0303030303",
+                        ".,.,.,.,.,.,.,.,.,.,.,.,03030303",
+                        ".,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,",
+                        ".,.,.,.,.,.,.,.,.,.,.,.,.,.,0303",
+                        ".,.,.,.,.,.,.,.,.,.,.,.,.,.,.,03",
+                        ".,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,",
            ],
         },
         brickCenter: {
@@ -4701,7 +4984,7 @@ jb.glyphs = {
                         ".,030303.,030303.,030303.,030303",
                         ".,030303.,030303.,030303.,030303",
                         ".,030303,.030303.,030303.,030303",
-                        ".,030303,..,.,.,.,030303.,.,.,.,",
+                        ".,030303,.,.,.,.,030303.,.,.,.,",
                         ".,030303.,030303.,030303.,030303",
                         ".,030303.,030303.,030303.,030303",
                         ".,030303.,030303.,030303.,030303",
@@ -4723,7 +5006,7 @@ jb.glyphs = {
                         ".,030303.,030303.,030303.,030303",
                         ".,030303.,030303.,030303.,030303",
                         ".,030303,.030303.,030303.,030303",
-                        ".,030303,..,.,.,.,030303.,.,.,.,",
+                        ".,030303,.,.,.,.,030303.,.,.,.,",
                         ".,030303.,030303.,030303.,030303",
                         ".,030303.,030303.,030303.,030303",
                         ".,030303.,030303.,030303.,030303",
@@ -4745,7 +5028,7 @@ jb.glyphs = {
                         ".,030303.,03.,.,.,.,.,03.,030303",
                         ".,030303.,030303.,030303.,030303",
                         ".,030303,.030303.,030303.,030303",
-                        ".,030303,..,.,.,.,030303.,.,.,.,",
+                        ".,030303,.,.,.,.,030303.,.,.,.,",
                         ".,030303.,030303.,030303.,030303",
                         ".,030303.,030303.,030303.,030303",
                         ".,030303.,030303.,030303.,030303",
@@ -4783,13 +5066,13 @@ jb.glyphs = {
                         ".,0303.,.,.,.,.,.,.,.,.,.,030303",
                         ".,03.,.,.,.,.,.,.,.,.,.,.,.,.,.,",
                         ".,03.,.,.,.,.,.,.,.,.,.,.,.,0303",
-                        ".,03.,.,.,.,.,.,,..,.,.,.,.,0303",
+                        ".,03.,.,.,.,.,.,,.,.,.,.,.,0303",
                         ".,03.,.,.,.,.,.,.,.,.,.,.,.,0303",
                         ".,.,.,.,.,.,.,.,.,.,.,.,.,.,0303",
                         ".,03.,.,.,.,.,.,.,.,.,.,.,.,0303",
                         ".,03.,.,.,.,.,.,.,.,.,.,.,.,0303",
                         ".,03.,.,.,.,.,.,.,.,.,.,.,.,0303",
-                        ".,03.,.,,..,.,.,.,.,.,.,.,.,.,.,",
+                        ".,03.,.,,.,.,.,.,.,.,.,.,.,.,.,",
                         ".,03.,.,.,.,.,.,.,.,.,.,.,.,0303",
                         ".,03.,.,.,.,.,.,.,.,.,.,.,.,0303",
                         ".,03.,.,.,.,.,.,.,.,.,.,.,.,0303",
@@ -5051,6 +5334,14 @@ jb.glyphs = {
     ]
 };
 
+///////////////////////////////////////////////////////////////////////////////
+//  .oooooo.o   .oooooo.   ooooo     ooo ooooo      ooo oooooooooo.   
+// d8P'    `Y8  d8P'  `Y8b  `888'     `8' `888b.     `8' `888'   `Y8b  
+// Y88bo.      888      888  888       8   8 `88b.    8   888      888 
+//  `"Y8888o.  888      888  888       8   8   `88b.  8   888      888 
+//      `"Y88b 888      888  888       8   8     `88b.8   888      888 
+// oo     .d8P `88b    d88'  `88.    .8'   8       `888   888     d88' 
+// 8""88888P'   `Y8bood8P'     `YbodP'    o8o        `8  o888bood8P'   
 // SOUND //////////////////////////////////////////////////////////////////////
 jb.sound = {
     DEFAULT_FREQ: 440, // Hz
@@ -5058,13 +5349,53 @@ jb.sound = {
     DEFAULT_DUR: 0.25, // sec
     CHANNELS: {MONO: 1, STEREO: 2},
     WAVES_PER_NOISE: 17,
+    FORMAT: {
+        MP3: {ext: 'mp3', mime: 'audio/mpeg'},
+        OGG: {ext: 'ogg', mime: 'audio/ogg; codecs=vorbis'}
+      },
+    DEFAULT_CHANNELS: 2,
+    DEFAULT_DELAY:    0.1,
+    STOP_ALL_CHANNELS:-1,
+    INVALID_CHANNEL:  -99,
+      
+    isEnabled:       true,
+    isAvailable:     window.Audio,
+    preferredFormat: null,
+    sounds:          {},
 
+    masterVolume:    1.0,
     audioContext: null,
     noiseFactor: 0.33,
     channels: 1,
     dummySound: { audioNode: null, play: function() {}, stop: function() {} },
 
     init: function() {
+        var capTester = new Audio(),
+            iFormat = 0;
+
+        // Audio resource initialization:
+        for (iFormat in jb.sound.FORMAT) {
+          if (capTester.canPlayType(jb.sound.FORMAT[iFormat].mime) === "probably") {
+            jb.sound.preferredFormat = jb.sound.FORMAT[iFormat];
+            break;
+          }
+        }
+
+        if (!this.preferredFormat) {
+          for (iFormat in jb.sound.FORMAT) {
+            if (capTester.canPlayType(jb.sound.FORMAT[iFormat].mime) === "maybe") {
+              jb.sound.preferredFormat = jb.sound.FORMAT[iFormat];
+              break;
+            }
+          }
+        }
+
+        if (!jb.sound.preferredFormat) {
+          jb.sound.isAvailable = false;
+          jb.sound.isEnabled = false;
+        }
+
+        // Procedural audio initialization:
         try {
           window.AudioContext = window.AudioContext || window.webkitAudioContext;
           this.audioContext = new AudioContext();
@@ -5074,6 +5405,228 @@ jb.sound = {
         }
     },
 
+    // Sound Resources ----------------------------------------------
+    activate: function() {
+        jb.sound.isEnabled = jb.sound.isAvailable;
+    },
+
+    deactivate: function() {
+        jb.sound.stopAll();
+        jb.sound.isEnabled = false;
+    },
+
+    getFreeChannelIndex: function(sound, now) {
+        var i = 0;
+        var iChannel = jb.sound.INVALID_CHANNEL;
+        var mostDelay = 0;
+        var testDelay = 0;
+
+        if (sound && sound.channels.length && sound.playing.length && sound.lastPlayTime.length) {
+            for (var i=0; i<sound.channels.length; ++i) {
+                testDelay = (now - sound.lastPlayTime[i]) * 0.001;
+                if (testDelay > mostDelay && testDelay > sound.minDelay) {
+                    mostDelay = testDelay;
+                    iChannel = i;
+                }
+            }
+        }
+
+        return iChannel;
+    },
+
+    play: function(sound, volume) {
+        var totalVolume = typeof(volume) === 'undefined' ? 1 : volume,
+            playedIndex = jb.sound.INVALID_CHANNEL,
+            now = Date.now();
+
+        totalVolume = jb.sound.clampVolume(totalVolume * jb.sound.getMasterVolume());
+
+        if (sound) {
+            playedIndex = jb.sound.getFreeChannelIndex(sound, now);
+      
+        try {
+            if (playedIndex !== jb.sound.INVALID_CHANNEL) {
+                sound.iChannel = playedIndex;
+                sound.lastPlayTime[playedIndex] = now;
+                sound.channels[playedIndex].pause();
+                sound.channels[playedIndex].loop = false;
+                sound.channels[playedIndex].volume = totalVolume;
+                sound.channels[playedIndex].currentTime = 0;
+                sound.playing[playedIndex] = true;
+                sound.channels[playedIndex].play();
+            }
+        }
+        catch(err) {
+            // Error message?
+        }
+    }
+
+    return playedIndex;
+    },
+
+    loop: function(sound, volume) {
+        var now = Date.now(),
+            totalVolume = typeof(volume) === 'undefined' ? 1 : volume,
+            playedIndex = jb.sound.INVALID_CHANNEL;
+
+        totalVolume = jb.sound.clampVolume(totalVolume * jb.sound.getMasterVolume());
+
+        if (sound) {
+            playedIndex = jb.sound.getFreeChannelIndex(sound, now);
+          
+            try {
+                if (playedIndex !== jb.sound.INVALID_CHANNEL) {
+                  sound.iChannel = playedIndex;
+                  sound.lastPlayTime[playedIndex] = now;
+                  sound.channels[playedIndex].pause();
+                  sound.channels[playedIndex].loop = true;
+                  sound.channels[playedIndex].volume = totalVolume;
+                  sound.channels[playedIndex].currentTime = 0;
+                  sound.playing[playedIndex] = true;
+                  sound.channels[playedIndex].play();
+                }
+            }
+            catch(err) {
+            // Error message?
+            }
+        }
+
+        return playedIndex;
+    },
+
+    pause: function(sound, channelIndex) {
+        var iChannel = 0,
+            iStart = typeof(channelIndex) === 'undefined' || channelIndex === jb.sound.INVALID_CHANNEL ? 0 : channelIndex,
+            iEnd = typeof(channelIndex) === 'undefined' || channelIndex === jb.sound.INVALID_CHANNEL ? sound.channels.length - 1 : channelIndex;
+
+        for (iChannel = iStart; iChannel <= iEnd; ++iChannel) {
+            sound.channels[iChannel].pause();
+            sound.playing[iChannel] = false;
+        }
+    },
+
+    resume: function(sound, channelIndex) {
+        var iChannel = 0,
+            iStart = typeof(channelIndex) === 'undefined' || channelIndex === jb.sound.INVALID_CHANNEL ? 0 : channelIndex,
+            iEnd = typeof(channelIndex) === 'undefined' || channelIndex === jb.sound.INVALID_CHANNEL ? sound.channels.length - 1 : channelIndex;
+
+        for (iChannel = iStart; iChannel <= iEnd; ++iChannel) {
+            sound.channels[iChannel].play();
+            sound.playing[iChannel] = true;
+        }
+    },
+
+    stop: function(sound, channelIndex) {
+        var iChannel = 0,
+            iStart = typeof(channelIndex) === 'undefined' || channelIndex === jb.sound.INVALID_CHANNEL ? 0 : channelIndex,
+            iEnd = typeof(channelIndex) === 'undefined' || channelIndex === jb.sound.INVALID_CHANNEL ? sound.channels.length - 1 : channelIndex;
+
+        channelIndex = channelIndex || jb.sound.STOP_ALL_CHANNELS;
+
+        if (channelIndex === jb.sound.STOP_ALL_CHANNELS) {
+            iStart = 0;
+            iEnd = sound.channels.length - 1;
+        }
+
+        try {
+            for (iChannel = iStart; iChannel <= iEnd; ++iChannel) {
+                sound.channels[iChannel].pause();
+                sound.channels[iChannel].loop = false;
+                sound.channels[iChannel].currentTime = 0;
+                sound.playing[iChannel] = false;
+            }
+        }
+        catch(err) {
+            // Error message?
+        }
+    },
+
+    stopAll: function() {
+        var key;
+
+        for (key in jb.sound.sounds) {
+            jb.sound.stop(jb.sound.sounds[key], jb.sound.STOP_ALL_CHANNELS);
+        }
+    },
+
+    setMasterVolume: function(newMasterVolume) {
+        jb.sound.masterVolume = jb.sound.clampVolume(newMasterVolume);
+    },
+
+    getMasterVolume: function() {
+        return jb.sound.masterVolume;
+    },
+
+    clampVolume: function(volume) {
+        return Math.min(1, Math.max(0, volume));
+    },
+
+    load: function(resourceName, onLoadedCallback, onErrorCallback, nChannels, replayDelay) {
+        var numChannels = nChannels || jb.sound.DEFAULT_CHANNELS,
+            minReplayDelay = replayDelay || jb.sound.DEFAULT_DELAY,
+
+            path = resourceName,
+            extension = path.substring(path.lastIndexOf(".")),
+            nNewChannels = 0,
+            i = 0,
+            newChannel = null,
+            sentinel = null;
+
+        if (jb.sound.preferredFormat) {
+            if (extension) {
+                path = path.replace(extension, "");
+            }
+
+            path = path + "." + jb.sound.preferredFormat.ext;
+
+            if (!jb.sound.sounds[resourceName] ||
+                jb.sound.sounds[resourceName].length < nChannels) {
+                if (!jb.sound.sounds[resourceName]) {
+                    jb.sound.sounds[resourceName] = {
+                        channels:     [],
+                        playing:      [],
+                        lastPlayTime: [],
+                        minDelay:     minReplayDelay,
+                    };
+                }
+            
+                nNewChannels = numChannels - jb.sound.sounds[resourceName].channels.length;
+                for (i=0; i<nNewChannels; ++i) {
+                    newChannel = new Audio(path);
+                    sentinel = new function() { this.bFirstTime = true };
+                  
+                    newChannel.addEventListener('canplaythrough', function callback() {
+                        // HACKy "fix" for Chrome's 'canplaythrough' bug.
+                        if (sentinel.bFirstTime) {
+                            if (onLoadedCallback) {
+                                onLoadedCallback(jb.sound.sounds[resourceName], resourceName);
+                            }
+                            sentinel.bFirstTime = false;
+                        }
+                    }, false);
+                  
+                    if (onErrorCallback) {
+                        newChannel.addEventListener('onerror', function callback() {
+                            onErrorCallback(resourceName);
+                        }, false);
+                    }
+                
+                    newChannel.preload = "auto";
+                    newChannel.load();
+                    jb.sound.sounds[resourceName].channels.push(newChannel);
+                    jb.sound.sounds[resourceName].playing.push(false);
+                    jb.sound.sounds[resourceName].lastPlayTime.push(0);
+                }
+            }
+        }
+        else if (onLoadedCallback) {
+            onLoadedCallback(resourceName, "Error: no preferred format");
+        }
+
+        return jb.sound.sounds[resourceName];
+    },
+
+    // Procedural Sound ---------------------------------------------
     makeSound: function(waveform, duration, volume, startFreq, endFreq) {
         volume = volume || this.DEFAULT_VOL;
         duration = duration || this.DEFAULT_DUR;
