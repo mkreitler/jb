@@ -47,6 +47,7 @@ jb.program = {
 
     // Functions ///////////////////////////////////////////////////////////////
     setUp: function() {
+        jb.resize(1024, 768);
 
         // Compute constants used to draw the shipping lanes.
         this.yTop = Math.round(jb.canvas.height * this.SKY_HEIGHT);

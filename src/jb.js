@@ -4280,7 +4280,7 @@ jb.glyphs = {
 
         if (jb.ctxt && glyphData) {
             if (!glyphData.image || !glyphData.image[key]) {
-                jb.glyphs.init(sizeStr, glyphName, key, sx, sx);
+                jb.glyphs.init(sizeStr, glyphName, key, sx, sy);
             }
 
             ctxt.drawImage(glyphData.image[key], x, y);
