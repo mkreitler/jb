@@ -1,7 +1,58 @@
 ///////////////////////////////////////////////////////////////////////////////
-// Resources Test
+// Sprite Test
 ///////////////////////////////////////////////////////////////////////////////
 jb.program = {
+    spriteImages: {},
+    tiles: {},
+    sprites: {},
+    dungeonCard: null,
+
+    start: function() {
+        this.spriteImages["dungeonTiles"] = resources.loadImage("oryx_16bit_fantasy_world_trans.png", "./res/fantasy art/");
+        this.spriteImages["creatureTiles"] = resources.loadImage("oryx_16bit_fantasy_creatures_trans.png", "./res/fantasy art/");
+    },
+
+    do_waitForResources: function() {
+        jb.until(resources.loadComplete());
+    },
+
+    initSprites: function() {
+        var sheets = [];
+
+        jb.setViewScale(2);
+            jb.setViewOrigin(0, 768 / 2);
+
+        this.tiles["dungeon01"] = jb.sprites.addSheet("dungeon01", this.spriteImages["dungeonTiles"], 24, 24, 1, 27, 24, 24);
+        this.tiles["creature01"] = jb.sprites.addSheet("creature01", this.spriteImages["creatureTiles"], 24, 24, 18, 22, 24, 24);
+
+        this.sprites["knight"] = jb.sprites.create("creature01", 0, 768 / 2 + 12,
+                                                        {"walk": jb.sprites.createState([{row: 0, col: 0}, {row: 1, col: 0}],
+                                                                                        0.33,
+                                                                                        false,
+                                                                                        0,
+                                                                                        null)},
+                                                    "walk");
+
+        sheets.push(this.tiles["dungeon01"]);
+        this.dungeonCard = new rmk.DungeonCard(sheets);
+
+        jb.listenForTap();
+    },
+
+    do_drawSprites: function() {
+        this.dungeonCard.drawAt(jb.ctxt, 0, 768 / 2 - 12);
+
+        this.sprites["knight"].update(jb.time.deltaTime);
+        this.sprites["knight"].draw(jb.ctxt);
+
+        jb.until(jb.tap.done);
+    }
+};
+
+///////////////////////////////////////////////////////////////////////////////
+// Resources Test
+///////////////////////////////////////////////////////////////////////////////
+jb.programResource = {
     spriteSheet: null,
     sound: null,
 
@@ -16,6 +67,7 @@ jb.program = {
 
     checkResources: function() {
         if (!resources.loadSuccessful()) {
+            jb.print("Resource load failed.`");
             goto("stop");
         }
         else {
@@ -31,7 +83,6 @@ jb.program = {
     },
 
     stop: function() {
-        jb.print("Resource load failed.`");
         jb.end();
     },
 };
@@ -73,7 +124,7 @@ jb.programTest = {
 ///////////////////////////////////////////////////////////////////////////////
 // Touch Test
 ///////////////////////////////////////////////////////////////////////////////
-jb.programTouchTest = {
+jb.programBlueprint = {
     touchKnight: null,
 
     setup: function() {
@@ -83,15 +134,20 @@ jb.programTouchTest = {
 
             // Template data
             {
-                x: 0,
-                y: 0,
-                size: "16x16",
-                glyph: "knight"
+                x: -1,
+                y: -1,
+                size: null,
+                glyph: null
             },
 
             // Template actions and shared data
             {
-                onCreate: function() {
+                onCreate: function(x, y, size, glyph) {
+                    this.x = x;
+                    this.y = y;
+                    this.size = size;
+                    this.glyph = glyph;
+                    
                     jb.glyphs.getBounds(this.size, this.glyph, 2, 2, this.bounds);
                 },
 
@@ -114,7 +170,7 @@ jb.programTouchTest = {
 
         blueprints.make("testKnight", "touchable");
 
-        this.touchKnight = blueprints.build("testKnight");
+        this.touchKnight = blueprints.build("testKnight", 0, 0, "16x16", "knight");
         this.touchKnight.moveTo(100, 50);
 
         jb.listenForSwipe();

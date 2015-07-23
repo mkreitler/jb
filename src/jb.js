@@ -1,5 +1,6 @@
 // Define the jb objects
 jb = {
+    EPSILON: 0.001,
     execStack: [],
     assert: function(test, msg) {
         if (!test) {
@@ -104,7 +105,29 @@ resources = {
 //  888    .88P  888       o  `88.    .8'   888       o  888          888  `88b.   888   8       `888       888      oo     .d8P 
 // o888bood8P'  o888ooooood8    `YbodP'    o888ooooood8 o888o        o888o  o888o o888o o8o        `8      o888o     8""88888P'  
 // Blueprints //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
+// Usage:
+//
+// Define a new blueprint:
+// blueprints.draft(
+//   "testKnigh",
+//
+//   // Data
+//   {
+//     ...
+//   },
+//
+//   // Actions
+//   {
+//     ...
+//   },
+// );
+//
+// Extend an existing blueprint with components:
+// blueprints.make("testKnight", "touchable")
+//
+// Instantiate an object from a blueprint:
+// blueprints.build("testKnight");
+//
 blueprints = {
     mixins: {},
 
@@ -152,9 +175,15 @@ blueprints = {
         var instance = null,
             template = blueprints[name],
             i = 0,
-            mixin = null;
+            mixin = null,
+            args = [];
 
         if (template) {
+            // Build argument list.
+            for (i=1; i<arguments.length; ++i) {
+              args.push(arguments[i]);
+            }
+
             instance = Object.create(template.proto, template.data);
 
             for (i=0; i<template.proto._components.length; ++i) {
@@ -165,7 +194,7 @@ blueprints = {
             }
 
             if (instance.onCreate) {
-                instance.onCreate();
+                instance.onCreate.apply(instance, args);
             }
         }
 
@@ -182,21 +211,10 @@ blueprints = {
 // `88b    ooo  `88b    d88'  8    Y     888   888         `88b    d88'  8       `888   888       o  8       `888       888      oo     .d8P 
 //  `Y8bood8P'   `Y8bood8P'  o8o        o888o o888o         `Y8bood8P'  o8o        `8  o888ooooood8 o8o        `8      o888o     8""88888P'  
 // Components //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// All components must define 'make', 'spawn', and 'destroy' functions in order
+// All components must define 'spawn', and 'destroy' functions in order
 // to be correctly added/removed by the 'blueprint' object.
 jb.touchables = {
-    instances: [],
-
-    makeInstance: function(instance) {
-        if (!instance.bounds) {
-            instance.bounds = new jb.bounds(0, 0, 0, 0);
-        }
-
-        if (!instance.touchLayer) {
-            instance.touchLayer = 0;
-        }
-    },
-
+    // Blueprint Interface ////////////////////////////////////////////////////
     spawn: function(instance) {
         var i = 0,
             bInserted = false;
@@ -223,6 +241,19 @@ jb.touchables = {
         // Remove the instance from the instances array.
         if (index >= 0) {
             jb.touchables.instances.slice(index, 1);
+        }
+    },
+
+    // 'Touchables' Implementation ////////////////////////////////////////////
+    instances: [],
+
+    makeInstance: function(instance) {
+        if (!instance.bounds) {
+            instance.bounds = new jb.bounds(0, 0, 0, 0);
+        }
+
+        if (!instance.touchLayer) {
+            instance.touchLayer = 0;
         }
     },
 
@@ -727,7 +758,13 @@ jb.render = function() {
     }
 
     // Refresh the screen.
+    jb.screenBufferCtxt.save();
+    jb.screenBufferCtxt.translate(-jb.viewOrigin.x, -jb.viewOrigin.y);
+    if (Math.abs(1 - jb.viewScale) > jb.EPSILON) {
+      jb.screenBufferCtxt.scale(jb.viewScale, jb.viewScale);
+    }
     jb.screenBufferCtxt.drawImage(jb.canvas, 0, 0);
+    jb.screenBufferCtxt.restore();
 
     // Request a new a update.
     requestAnimationFrame(jb.loop);
@@ -818,6 +855,8 @@ jb.screenBuffer = null;
 jb.screenBufferCtxt = null;
 jb.ctxt = null;
 jb.columns = 80;
+jb.viewScale = 1;
+jb.viewOrigin = {x: 0, y: 0 };
 jb.rows = 25;
 jb.COL_TO_CHAR = 12 / 20;
 jb.COL_TO_CHAR_SPACING = 11.69 / 20;
@@ -905,12 +944,17 @@ jb.blink = function() {
 jb.clearLine = function(row) {
     var x, y;
 
-    if (row >= 1 && row <= jb.rows) {
-        row = row - 1;
+    if (row >= 0 && row <= jb.rows) {
         jb.ctxt.fillStyle = jb.backColor;
         x = jb.xFromCol(0);
         y = jb.yFromRow(row);
         jb.ctxt.fillRect(x, y, jb.canvas.width, jb.cellSize.height);
+
+      // DEBUG:
+      // jb.ctxt.beginPath();
+      // jb.ctxt.strokeStyle = "red";
+      // jb.ctxt.rect(x, y, jb.canvas.width, jb.cellSize.height);
+      // jb.ctxt.stroke();
     }
 };
 jb.colorRows = function() {
@@ -931,6 +975,13 @@ jb.colorRows = function() {
             jb.ctxt.fillRect(x, y, jb.canvas.width, jb.cellSize.height);
         }
     }
+};
+jb.setViewScale = function(newScale) {
+  jb.viewScale = newScale;
+};
+jb.setViewOrigin = function(x, y) {
+  jb.viewOrigin.x = x || 0;
+  jb.viewOrigin.y = y || 0;
 };
 jb.xFromCol = function(col) {
     return col * jb.cellSize.width;
@@ -4186,6 +4237,219 @@ jb.fonts = {
         },
     }
 };
+
+/////////////////////////////////////////////////////////////////////////////////////
+//  .oooooo..o ooooooooo.   ooooooooo.   ooooo ooooooooooooo oooooooooooo  .oooooo..o 
+// d8P'    `Y8 `888   `Y88. `888   `Y88. `888' 8'   888   `8 `888'     `8 d8P'    `Y8 
+// Y88bo.       888   .d88'  888   .d88'  888       888       888         Y88bo.      
+//  `"Y8888o.   888ooo88P'   888ooo88P'   888       888       888oooo8     `"Y8888o.  
+//      `"Y88b  888          888`88b.     888       888       888    "         `"Y88b 
+// oo     .d8P  888          888  `88b.   888       888       888       o oo     .d8P 
+// 8""88888P'  o888o        o888o  o888o o888o     o888o     o888ooooood8 8""88888P'  
+/////////////////////////////////////////////////////////////////////////////////////
+// Sprites are (possibly) animated images that reference image resources.
+// Usage:
+// jb.sprites.create(spriteSheet, x, y, [states], [startState], [anchorX], [anchorY]);
+// Where spriteSheet is a spriteSheet reference,
+//   anchorX and anchorY are floating point offsets for the sprite's origin
+//   states is an object containing arrays of frame indeces into the source
+//     spriteSheet, for example:
+//     {
+//       idle:[0],
+//       run: [1, 2]
+//     }
+
+jb.spriteObj = function(sheet, x, y, states, startState, anchorX, anchorY) {
+  this.sheet = sheet;
+  this.states = states || {"idle": jb.sprites.createState([0], 0.0, true, 0, null)};
+  this.frameTime = 0.0;
+  this.anchor = {x: anchorX || 0.5, y:anchorY || 0.5};
+  this.state = states && startState && states[startState] ? states[startState] : this.getFirstState(this.states);
+  this.anchorX = this.anchorX || 0;
+  this.anchorY = this.anchorY || 0;
+  this.bounds = new jb.bounds(x || 0, y || 0, sheet.getCellWidth(), sheet.getCellHeight());
+};
+
+jb.spriteObj.prototype.getFirstState = function(states) {
+  var firstState = null,
+      key = null;
+
+  for (key in states) {
+    firstState = states[key];
+    break;
+  }
+
+  return firstState;
+};
+
+jb.spriteObj.prototype.moveTo = function(x, y) {
+  this.bounds.x = x;
+  this.bounds.y = y;
+};
+
+jb.spriteObj.prototype.moveBy = function(dx, dy) {
+  this.bounds.x += dx;
+  this.bounds.y += dy;
+};
+
+jb.spriteObj.prototype.setState = function(newState) {
+  var param = 0,
+      newState = this.states[newState];
+
+  if (newState && newState != this.state) {
+    if (newState.bReset || !this.state) {
+      this.state = newState;
+      this.state.frameIndex = 0;
+      this.frameTime = 0.0;
+    }
+    else if (newState) {
+      // Figure out where we are in the frames of the
+      // current state and advance that far into the
+      // frames of the new state.
+      newState.frameIndex = Math.floor(this.state.frameIndex / this.state.frames.length * newState.frames.length);
+      this.frameTime = this.frameTime * newState.frameDt / this.state.frameDt;
+      newState.frameIndex = this.state.frameIndex;
+
+      this.state = newState;
+    }
+    else {
+      this.state = null;
+    }
+  }
+};
+
+jb.spriteObj.prototype.resetTimer = function() {
+  this.frameTime = 0.0;
+};
+
+jb.spriteObj.prototype.update = function(dt) {
+  if (this.state) {
+    if (this.state.frameDt > 0.0) {
+      this.frameTime += dt;
+
+      while (this.frameTime >= this.state.frameDt) {
+        this.frameTime -= this.state.frameDt;
+        this.state.frameIndex += 1;
+        this.state.frameIndex %= this.state.frames.length;
+
+        if (this.state.events && this.state.events[this.state.frameIndex]) {
+          this.state.events[this.state.frameIndex](this);
+        }
+      }
+    }
+  }
+};
+
+jb.spriteObj.prototype.draw = function(ctxt) {
+  var destX = 0,
+      destY = 0,
+      frameInfo = null;
+
+  if (this.state && this.state.frames.length > this.state.frameIndex) {
+    destX = this.bounds.l - this.anchorX * this.bounds.w;
+    destY = this.bounds.t - this.anchorY * this.bounds.h;
+
+    if (typeof this.state.frames[this.state.frameIndex] === "number") {
+      // Assume frame format of single number is 1D index into frames.
+      this.sheet.draw(ctxt, destX, destY, this.state.frames[this.state.frameIndex]);
+    }
+    else {
+      // Assume frame format of ordered pair, {rows, cols}, into frames.
+      frameInfo = this.state.frames[this.state.frameIndex];
+      this.sheet.draw(ctxt, destX, destY, frameInfo.row, frameInfo.col);
+    }
+  }
+};
+
+jb.spriteSheetObj = function(source, top, left, rows, cols, cellDx, cellDy) {
+  this.source = source;
+  this.top = top;
+  this.left = left;
+  this.rows = rows;
+  this.cols = cols;
+  this.cellDx = cellDx;
+  this.cellDy = cellDy;
+};
+
+jb.spriteSheetObj.prototype.draw = function(ctxt, destX, destY, cellRow, cellCol) {
+  if (arguments.length < 5) {
+    // Assume cellRow is actually a 1D array index into the sheet.
+    cellCol = cellRow % this.cols;
+    cellRow = Math.floor(cellRow / this.cols);
+  }
+
+  ctxt.drawImage(this.source,
+                 this.left + cellCol * this.cellDx,
+                 this.top + cellRow * this.cellDy,
+                 this.cellDx,
+                 this.cellDy,
+                 destX,
+                 destY,
+                 this.cellDx,
+                 this.cellDy);
+};
+
+jb.spriteSheetObj.prototype.drawAsTile = function(ctxt, top, left, destRow, destCol, cellRow, cellCol) {
+  if (arguments.length < 7) {
+    // Assume cellRow is actually a 1D array index into the sheet.
+    cellCol = cellRow % this.cols;
+    cellRow = Math.floor(cellRow / this.cols);
+  }
+
+  ctxt.drawImage(this.source,
+                 this.left + cellCol * this.cellDx,
+                 this.top + cellRow * this.cellDy,
+                 this.cellDx,
+                 this.cellDy,
+                 left + destCol * this.cellDx,
+                 top + destRow * this.cellDy,
+                 this.cellDx,
+                 this.cellDy);
+}
+
+jb.spriteSheetObj.prototype.getCellWidth = function() {
+  return this.cellDx;
+};
+
+jb.spriteSheetObj.prototype.getCellHeight = function() {
+  return this.cellDy;
+};
+
+jb.spriteSheetObj.prototype.getNumCells = function() {
+  return this.rows * this.cols;
+};
+
+jb.sprites = {
+  sheets: {},
+
+  addSheet: function(name, srcImg, top, left, rows, cols, cellDx, cellDy) {
+    var sheet = null;
+
+    if (this.sheets[name]) {
+      sheet = this.sheets[name];
+    }
+    else {
+      // Add the sheet.
+      sheet = new jb.spriteSheetObj(srcImg, top, left, rows, cols, cellDx, cellDy);
+      this.sheets[name] = sheet;
+    }
+
+    return sheet;
+  },
+
+  createState: function(frames, frameDt, bReset, frameIndex, events) {
+    return {frames: frames || null,
+            frameDt: frameDt || 0,
+            bReset: bReset || true,
+            frameIndex: frameIndex || 0,
+            events: events || null};
+  },
+
+  create: function(sheetName, x, y, states, startState, anchorX, anchorY) {
+    return new jb.spriteObj(this.sheets[sheetName], x, y, states, startState, anchorX, anchorY);
+  }
+};
+
 //////////////////////////////////////////////////////////////////////////////////
 //   .oooooo.    ooooo        oooooo   oooo ooooooooo.   ooooo   ooooo  .oooooo.o 
 //  d8P'  `Y8b   `888'         `888.   .8'  `888   `Y88. `888'   `888' d8P'    `Y8 

@@ -61,7 +61,7 @@ game = {
     //     return this.bet === null;
     // },
 
-    while_waitForBet: function() {
+    do_waitForBet: function() {
         if (jb.swipe.startTime > 0) {
             this.bet = Math.abs(jb.swipe.endX - jb.swipe.startX) / jb.canvas.width * this.MAX_BET;
         }
@@ -74,7 +74,7 @@ game = {
         jb.clearLine(jb.row);
         jb.printAt("Your bet " + this.bet, jb.row + 1, 1);
 
-        return !jb.swipe.done;
+        jb.while(!jb.swipe.done);
     },
 
     processBet: function() {
@@ -142,8 +142,8 @@ game = {
     //     return jb.readKey() === null;
     // },
 
-    while_waitForTap: function() {
-        return !jb.tap.done;
+    do_waitForTap: function() {
+        jb.while(!jb.tap.done);
     },
 
     nextTurnOrEnd: function() {
