@@ -109,7 +109,7 @@ resources = {
 //
 // Define a new blueprint:
 // blueprints.draft(
-//   "testKnigh",
+//   "testKnight",
 //
 //   // Data
 //   {
@@ -213,6 +213,142 @@ blueprints = {
 // Components //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // All components must define 'spawn', and 'destroy' functions in order
 // to be correctly added/removed by the 'blueprint' object.
+jb.transitions = {
+  // Blueprint Interface //////////////////////////////////////////////////////
+  transitioners: [],
+
+  spawn: function(instance) {
+    jb.transitions.makeInstance(instance);
+    this.transitioners.push(instance);
+  },
+
+  destroy: function(instance) {
+    jb.removeFromArray(this.transitioners, instance);
+  },
+
+  // 'Transitions' Interface //////////////////////////////////////////////////
+  makeInstance: function(instance) {
+    if (typeof instance.transitions === "undefined") {
+      instance.transitions = [];
+    }
+
+    if (typeof instance.transitionStates === "undefined") {
+      instance.transitionStates = {};
+    }
+  },
+
+  TransitionState: function(tStart, tEnd, tNow, duration, fnUpdate, fnFinalize) {
+    this.reset = function(tStart, tEnd, tNow, duration, fnUpdate, fnFinalize) {
+      this.tStart = tStart;
+      this.tEnd = tEnd;
+      this.tNow = tNow;
+      this.duration = Math.max(duration, 1);
+      this.update = fnUpdate;
+      this.finalize = fnFinalize;
+      this.bActive = false;
+    }
+  },
+
+  update: function() {
+    var iTransitioner = 0,
+        param = 0,
+        transitioner = null;
+
+    for (iTransitioner=0; iTransitioner<this.transitioners.length; ++iTransitioner) {
+      transitioner = this.transitioners[iTransitioner];
+      if (transitioner != null) {
+        transitioner.transitionerUpdate.apply(transitioner);
+      }
+    }
+  },
+
+  // Mixins -------------------------------------------------------------------
+  // All mixins must start with the prefix 'transitions' in order to be added
+  // to the instance's prototype.
+
+  bDoUpdate: true,  // DEBUG: set to 'false' to disable update look. Useful for debugging infinite loops.
+
+  transitionerUpdate: function() {
+    var param = 0,
+        dt = jb.time.deltaTimeMS,
+        timeUsed = 0,
+        curState = this.transitions[0];
+
+    while (jb.transitions.bDoUpdate && dt > 0 && this.transitions.length > 0 && curState) {
+      curState.bActive = true;
+      timeUsed = Math.min(dt, curState.tEnd - curState.tNow);
+      dt -= timeUsed;
+      curState.tNow += timeUsed;
+      param = Math.min(1.0, (curState.tNow - curState.tStart) / curState.duration);
+
+      curState.update(param);
+
+      if (Math.abs(param - 1.0) < jb.EPSILON) {
+        this.transitionerFinalizeCurrent();
+      }
+
+      curState = this.transitions[0];
+    }
+  },
+
+  transitionerCountActiveTransitions: function() {
+    return this.transitions.length;
+  },
+
+  transitionerAdd: function(name, duration, fnUpdate, fnFinalize, bReset) {
+    var newTransition = null,
+        tStart = 0,
+        curParam = 0;
+
+    duration *= 1000;
+
+    // See if this transition state already exists for us.    
+    newTransition = this.transitionStates[name];
+
+    if (!newTransition) {
+      // No previous
+      newTransition = new jb.transitions.TransitionState()
+      bReset = true;
+    }
+
+    if (!newTransition.bActive || bReset) {
+      // Old transition finished or we're resetting it.
+      newTransition.reset(jb.time.now, jb.time.now + duration, jb.time.now, duration, fnUpdate, fnFinalize);
+    }
+    else {
+      // Old transition exists and is still active.
+      // Figure out where we should start the new transition. If we're
+      // already tracking a transitionState of this type, we should
+      // start where the last one left off.
+      curParam = (newTransition.tNow - newTransition.tStart) / newTransition.duration;
+      newTransition.tEnd = newTransition.tNow + (1 - curParam) * duration;
+      newTransition.reset(newTransition.tNow - curParam * duration, newTransition.tEnd, newTransition.tNow, duration, update, finalize);
+    }
+
+    this.transitions.push(newTransition);
+    this.transitionStates[name] = newTransition;
+  },
+
+  transitionerFinalizeCurrent: function() {
+    if (this.transitions[0]) {
+      this.transitions[0].finalize();
+      this.transitions[0].bActive = false;
+      this.transitionStates[this.transitions[0].name] = null;
+      this.transitions.shift();
+    }
+  },
+
+  transitionerFinalizeAll: function() {
+    var i = 0;
+
+    while (this.transitions.length) {
+      this.transitionerFinalizeCurrent();
+    }
+  }
+};
+
+blueprints.mixins["transitioner"] = jb.transitions;
+
 jb.touchables = {
     // Blueprint Interface ////////////////////////////////////////////////////
     spawn: function(instance) {
@@ -223,7 +359,8 @@ jb.touchables = {
 
         for (i=0; i<jb.touchables.instances.length; ++i) {
             if (instance.touchLayer < jb.touchables.instances[i].touchLayer) {
-                // Insert the instance at this point.                
+                // Insert the instance at this point.
+                // TODO: replace 'splice' with an optimizable function.                
                 jb.touchables.splice(i, 0, instance);
                 bInserted = true;
                 break;
@@ -239,8 +376,9 @@ jb.touchables = {
         var index = jb.touchables.instances.indexOf(instance);
 
         // Remove the instance from the instances array.
+        // TODO: replace 'splice' with an optimizable function.
         if (index >= 0) {
-            jb.touchables.instances.slice(index, 1);
+            jb.touchables.instances.splice(index, 1);
         }
     },
 
@@ -290,12 +428,23 @@ blueprints.mixins["touchable"] = jb.touchables;
 //  888     888   888       o  888       o  888          888       o  888  `88b.  oo     .d8P 
 // o888o   o888o o888ooooood8 o888ooooood8 o888o        o888ooooood8 o888o  o888o 8""88888P'  
 // Helpers //////////////////////////////////////////////////////////////////////////////////
-jb.removeFast = function(theArray, theElement) {
-    var index = theArray.indexOf(theElement);
+jb.removeFromArray = function(theArray, theElement, bPreserveOrder) {
+    var index = theArray.indexOf(theElement),
+        i = 0;
 
     if (index >= 0) {
-        theArray[index] = theArray[theArray.length - 1];
-        theArray.length -= 1;
+      if (!bPreserveOrder) {
+        if (index >= 0) {
+            theArray[index] = theArray[theArray.length - 1];
+        }
+      }
+      else {
+        for (i=index; i<theArray.length - 1; ++i) {
+          theArray[i] = theArray[i + 1];
+        }
+      }
+
+      theArray.length -= 1;
     }
 };
 
@@ -721,6 +870,7 @@ jb.end = function() {
 // Interal Methods /////////////////////////////////////////////////////////////
 jb.loop = function() {
     jb.updateTimers();
+    jb.transitions.update();
 
     if (jb.bInterrupt) {
         jb.nextInstruction();

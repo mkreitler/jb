@@ -6,6 +6,7 @@ jb.program = {
     tiles: {},
     sprites: {},
     dungeonCard: null,
+    fadePlane: null,
 
     start: function() {
         this.spriteImages["dungeonTiles"] = resources.loadImage("oryx_16bit_fantasy_world_trans.png", "./res/fantasy art/");
@@ -36,6 +37,9 @@ jb.program = {
         sheets.push(this.tiles["dungeon01"]);
         this.dungeonCard = new rmk.DungeonCard(sheets);
 
+        this.createFadePlane();
+        this.fadePlane.startFadeOut();
+
         jb.listenForTap();
     },
 
@@ -45,7 +49,72 @@ jb.program = {
         this.sprites["knight"].update(jb.time.deltaTime);
         this.sprites["knight"].draw(jb.ctxt);
 
+        this.fadePlane.draw(jb.ctxt);
+
         jb.until(jb.tap.done);
+    },
+
+    done: function() {
+        jb.end();
+    },
+
+    // Helper Functions ///////////////////////////////////////////////////////
+    createFadePlane: function() {
+      blueprints.draft(
+        "fadePlane",
+        {
+          // Data
+          alpha: 0,
+          fadeColor: "black",
+        },
+
+        {
+          // Methods
+          updateFadeIn: function(param) {
+            this.alpha = param;
+          },
+
+          updateFadeOut: function(param) {
+            this.alpha = 1 - param;
+          },
+
+          finalizeFadeIn: function() {
+            this.alpha = 1;
+          },
+
+          finalizeFadeOut: function() {
+            this.alpha = 0;
+          },
+
+          startFadeIn: function() {
+            this.transitionerAdd("fadeIn", 0.5, this.updateFadeIn.bind(this), this.finalizeFadeIn.bind(this), true);
+          },
+
+          startFadeOut: function() {
+            this.transitionerAdd("fadeOut", 0.5, this.updateFadeOut.bind(this), this.finalizeFadeOut.bind(this), true);
+          },
+
+          draw: function(ctxt) {
+            if (this.alpha > 0) {
+              ctxt.save();
+
+              ctxt.globalAlpha = this.alpha;
+              ctxt.fillStyle = this.fadeColor;
+              ctxt.fillRect(0, 0, jb.canvas.width, jb.canvas.height);
+
+              ctxt.restore();
+            }
+          },
+
+          isFadeFinished: function() {
+            return this.alpha === 0 && this.transitionerCountActiveTransitions() === 0;
+          }
+        }
+      );
+
+      blueprints.make("fadePlane", "transitioner");
+
+      this.fadePlane = blueprints.build("fadePlane");
     }
 };
 
