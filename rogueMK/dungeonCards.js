@@ -32,7 +32,7 @@ rmk.DungeonCard.prototype.drawAt = function(ctxt, x, y) {
 
     for (iRow=0; iRow<this.layers[0].length; ++iRow) {
       for (iCol=0; iCol<this.layers[0][0].length; ++iCol) {
-        this.spriteSheets[iLayer].drawAsTile(ctxt, y, x, iRow, iCol, this.layers[iLayer][iRow][iCol]);
+        this.spriteSheets[iLayer].drawTile(ctxt, y, x, iRow, iCol, this.layers[iLayer][iRow][iCol]);
       }
     }
   }
