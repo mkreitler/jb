@@ -215,68 +215,191 @@ blueprints = {
 // to be correctly added/removed by the 'blueprint' object.
 
 ///////////////////////////////////////////////////////////////////////////////
-// tileSheet Object -----------------------------------------------------------
+// State Machines
 ///////////////////////////////////////////////////////////////////////////////
-jb.tileSheetObj = function(source, top, left, rows, cols, cellDx, cellDy) {
-  this.source = source;
-  this.top = top;
-  this.left = left;
-  this.rows = rows;
-  this.cols = cols;
-  this.cellDx = cellDx;
-  this.cellDy = cellDy;
-};
+jb.stateMachines = {
+  machines: [],
+  updating: [],
+  toAdd: [],
+  toRemove: [],
 
-jb.tileSheetObj.prototype.draw = function(ctxt, destX, destY, cellRow, cellCol) {
-  if (arguments.length < 5) {
-    // Assume cellRow is actually a 1D array index into the sheet.
-    cellCol = cellRow % this.cols;
-    cellRow = Math.floor(cellRow / this.cols);
+  addMachine: function(machine) {
+    if (this.machines.indexOf(machine) < 0) {
+      this.machines.push(machine);
+    }
+  },
+
+  removeMachine: function(machine) {
+    jb.removeFromArray(this.machines, machine);
+    jb.removeFromArray(this.updating, machine, true);
+  },
+
+  transitionTo: function(that, state) {
+    var bWantsUpdate = false,
+        bTransitioned = false;
+
+    that.smNextState = null;
+
+    if (state && state !== that.smCurrentState) {
+      // Exit current state.
+      if (that.smCurrentState && that.smCurrentState.exit) {
+        that.smCurrentState.exit.call(that);
+      }
+
+      that.smCurrentState = state;
+
+      if (that.smCurrentState) {      
+        if (that.smCurrentState.enter) {
+          that.smCurrentState.enter.call(that);
+        }
+
+        bWantsUpdate = true;
+      }
+
+      bTransitioned = true;
+    }
+    else if (state === null) {
+      that.smCurrentState = null;
+    }
+
+    return bTransitioned;
+  },
+
+  update: function() {
+    var i = 0,
+        that = null;
+
+    if (this.toAdd.length) {
+      for (i=0; i<this.toAdd.length; ++i) {
+        that = this.toAdd[i];
+        jb.assert(that.smNextState, "Starting state machine has to starting state!");
+        jb.assert(!that.smCurrentState, "Starting state machine has existing state!");
+
+        that.smCurrentState = that.smNextState;
+
+        if (that.smNextState.enter) {
+          that.smNextState.enter.call(that);
+        }
+
+        this.updating.push(this.toAdd[i]);
+      }
+      this.toAdd.length = 0;
+    }
+
+    for (i=0; i<this.updating.length; ++i) {
+      that = this.updating[i];
+
+      if (that.smNextState && that.smNextState !== that.smCurrentState) {
+        if (that.smCurrentState.exit) {
+          that.smCurrentState.exit.call(that);
+        }
+
+        that.smCurrentState = that.smNextState;
+        that.smNextState = null;
+      }
+
+      if (that.smCurrentState) {
+        that.smAllowStateChange = true;
+
+        if (that.smCurrentState.update) {
+          that.smCurrentState.update.call(that, jb.time.deltaTime);
+
+          if (that.smNextState && that.smNextState !== that.smCurrentState) {
+            if (that.smCurrentState.exit) {
+              that.smCurrentState.exit.call(that);
+            }
+
+            if (that.smNextState.enter) {
+              that.smNextState.enter.call(that);
+            }
+
+            that.smCurrentState = that.smNextState;
+            that.smNextState = null;
+          }
+        }
+        else {
+          // No update state, so force a stop.
+          that.stateMachineStop();
+        }
+
+        that.smAllowStateChange = false;
+      }
+    }
+
+    if (this.toRemove.length) {
+      for (i=0; i<this.toRemove.length; ++i) {
+        that = this.toRemove[i];
+        jb.assert(that.smCurrentState, "Stopping state machine has no state!");
+
+        if (that.smCurrentState.exit) {
+          that.smCurrentState.exit.call(that);
+        }
+
+        that.smCurrentState = null;
+
+        jb.removeFromArray(jb.stateMachines.updating, that, true);
+      }
+      this.toRemove.length = 0;
+    }
+  },
+
+  // Blueprint Interface //////////////////////////////////////////////////////
+  spawn: function(instance) {
+    if (!instance.smCurrentState) {
+      instance.smCurrentState = null;
+    }
+
+    if (!instance.smNextState) {
+      instance.smNextState = null;
+    }
+
+    if (!instance.smAllowStateChange) {
+      instance.smAllowStateChange = false;
+    }
+
+    this.addMachine(instance);
+  },
+
+  destroy: function(instance) {
+    this.removeMachine(instance);
+  },
+
+  // Mixins ///////////////////////////////////////////////////////////////////
+  stateMachineStart: function(state) {
+    jb.assert(!this.smCurrentState, "State machine already started!");
+    jb.assert(jb.stateMachines.updating.indexOf(this) < 0, "State machine already in update list!");
+
+    this.smAllowStateChange = true;
+    this.stateMachineSetNextState(state);
+    this.smAllowStateChange = false;
+
+    if (jb.stateMachines.toAdd.indexOf(this) < 0) {
+      jb.stateMachines.toAdd.push(this);
+    }
+  },
+
+  stateMachineSetNextState: function(nextState) {
+    jb.assert(this.smAllowStateChange, "Illegal state change in state machine!");
+
+    if (this.smCurrentState != nextState) {
+      this.smNextState = nextState;
+    }
+  },
+
+  stateMachineStop: function() {
+    jb.assert(this.smCurrentState, "State machine already stopped");
+    jb.assert(jb.stateMachines.updating.indexOf(this) >= 0, "State machine not in update list!");
+
+    if (jb.stateMachines.toRemove.indexOf(this) < 0) {
+      jb.stateMachines.toRemove.push(this);
+    }
   }
-
-  ctxt.drawImage(this.source,
-                 this.left + cellCol * this.cellDx,
-                 this.top + cellRow * this.cellDy,
-                 this.cellDx,
-                 this.cellDy,
-                 destX,
-                 destY,
-                 this.cellDx,
-                 this.cellDy);
 };
 
-jb.tileSheetObj.prototype.drawTile = function(ctxt, top, left, destRow, destCol, cellRow, cellCol) {
-  if (arguments.length < 7) {
-    // Assume cellRow is actually a 1D array index into the sheet.
-    cellCol = cellRow % this.cols;
-    cellRow = Math.floor(cellRow / this.cols);
-  }
-
-  ctxt.drawImage(this.source,
-                 this.left + cellCol * this.cellDx,
-                 this.top + cellRow * this.cellDy,
-                 this.cellDx,
-                 this.cellDy,
-                 left + destCol * this.cellDx,
-                 top + destRow * this.cellDy,
-                 this.cellDx,
-                 this.cellDy);
-}
-
-jb.tileSheetObj.prototype.getCellWidth = function() {
-  return this.cellDx;
-};
-
-jb.tileSheetObj.prototype.getCellHeight = function() {
-  return this.cellDy;
-};
-
-jb.tileSheetObj.prototype.getNumCells = function() {
-  return this.rows * this.cols;
-};
+blueprints.mixins["stateMachine"] = jb.stateMachines;
 
 ///////////////////////////////////////////////////////////////////////////////
-// Sprites --------------------------------------------------------------------
+// Sprites
 ///////////////////////////////////////////////////////////////////////////////
 // Sprites are (possibly) animated images that reference image resources.
 // Usage (deprecated):
@@ -293,7 +416,7 @@ jb.sprites = {
   sheets: {},
   allSprites: [],
 
-  addSheet: function(name, srcImg, top, left, rows, cols, cellDx, cellDy) {
+  addSheet: function(name, srcImg, left, top, rows, cols, cellDx, cellDy) {
     var sheet = null;
 
     if (this.sheets[name]) {
@@ -308,11 +431,11 @@ jb.sprites = {
     return sheet;
   },
 
-  createState: function(frames, frameDt, bReset, frameIndex, events) {
+  createState: function(frames, frameDt, bReset, events) {
     return {frames: frames || null,
             frameDt: frameDt || 0,
             bReset: bReset || true,
-            frameIndex: frameIndex || 0,
+            frameIndex: 0,
             events: events || null};
   },
 
@@ -321,12 +444,17 @@ jb.sprites = {
       instance.bounds = new jb.bounds(0, 0, 0, 0);
     }
 
+    if (!instance.alpha) {
+      instance.alpha = 1.0;
+    }
+
     instance.spriteInfo = {
       sheet: null,
       states: {},
       frameTime: 0.0,
       anchor: {x: 0.0, y: 0.0},
       state: null,
+      scale: {x: 1.0, y: 1.0}
     };
   },
 
@@ -345,8 +473,7 @@ jb.sprites = {
     this.spriteInfo.sheet = jb.sprites.sheets[newSheet];
 
     if (this.spriteInfo.sheet) {
-      this.bounds.w = this.spriteInfo.sheet.cellDx;
-      this.bounds.h = this.spriteInfo.sheet.cellDy;
+      this.bounds.resizeTo(this.spriteInfo.sheet.cellDx, this.spriteInfo.sheet.cellDy);
     }
   },
 
@@ -361,6 +488,11 @@ jb.sprites = {
   spriteSetAnchor: function(x, y) {
     this.spriteInfo.anchor.x = x;
     this.spriteInfo.anchor.y = y;
+  },
+
+  spriteSetScale: function(sx, sy) {
+    this.spriteInfo.scale.x = sx || 1.0;
+    this.spriteInfo.scale.y = sy || 1.0;
   },
 
   spriteAddState: function(newStateName, newState) {
@@ -385,11 +517,18 @@ jb.sprites = {
         curState = this.spriteInfo.state,
         newState = this.spriteInfo.states[newState];
 
-    if (newState && newState != curState) {
-      if (newState.bReset || !curState) {
+    if (newState) {
+      // If no state is currently defined, use the new state.
+      if (!curState) {
         this.spriteInfo.state = newState;
+      }
+
+      if (newState === curState || newState.bReset || !curState) {
+        // If we're resetting, or re-entering, or didn't have a previous state,
+        // initialize to the start of the state.
         this.spriteInfo.state.frameIndex = 0;
         this.spriteInfo.frameTime = 0.0;
+        this.spriteInfo.lastFrame = -1;
       }
       else if (newState) {
         // Figure out where we are in the frames of the
@@ -398,21 +537,26 @@ jb.sprites = {
         newState.frameIndex = Math.floor(curState.frameIndex / curState.frames.length * newState.frames.length);
         this.spriteInfo.frameTime = this.spriteInfo.frameTime * newState.frameDt / curState.frameDt;
         newState.frameIndex = curState.frameIndex;
-
-        this.spriteInfo.state = newState;
-      }
-      else {
-        this.spriteInfo.state = null;
+        this.spriteInfo.lastFrame = newState.frameIndex - 1;
       }
     }
+
+    this.spriteInfo.state = newState;
   },
 
   spriteResetTimer: function() {
     this.spriteInfo.frameTime = 0.0;
+    this.spriteInfo.lastFrame = -1;
+  },
+
+  spriteSetAlpha: function(newAlpha) {
+    this.alpha = Math.max(0.0, newAlpha);
+    this.alpha = Math.min(newAlpha, 1.0);
   },
 
   spriteUpdate: function(dt) {
-    var curState = this.spriteInfo.state;
+    var curState = this.spriteInfo.state,
+        framesPassed = 0;
 
     if (curState) {
       if (curState.frameDt > 0.0) {
@@ -423,44 +567,46 @@ jb.sprites = {
           curState.frameIndex += 1;
           curState.frameIndex %= curState.frames.length;
 
-          if (curState.events && curState.events[curState.frameIndex]) {
+          if (curState.events && curState.events[curState.frameIndex] && curState.lastFrame !== curState.frameIndex) {
             curState.events[curState.frameIndex](this);
           }
+
+          curState.lastFrame = curState.frameIndex;
         }
       }
     }
   },
 
-  spriteDraw: function(ctxt, sx, sy) {
+  spriteDraw: function(ctxt) {
     var destX = 0,
         destY = 0,
-        scaleX = sx || 1,
-        scaleY = sy || 1,
+        centerX = 0,
+        centerY = 0,
+        anchorX = this.spriteInfo.anchor.x,
+        anchorY = this.spriteInfo.anchor.y,
         frameInfo = null,
-        bWantsScale = scaleX !== 1 || scaleY !== 1,
-        bWantsRestore = bWantsScale,
+        bWantsScale = this.spriteInfo.scale.x !== 1 || this.spriteInfo.scale.y !== 1,
+        bWantsRestore = bWantsScale || this.alpha !== ctxt.globalAlpha,
         curState = this.spriteInfo.state,
         dx = 0,
         dy = 0;
 
-    if (curState && curState.frames.length > curState.frameIndex && this.spriteInfo.sheet) {
-      destX = this.bounds.l - this.spriteInfo.anchor.x * this.bounds.w;
-      destY = this.bounds.t - this.spriteInfo.anchor.y * this.bounds.h;
+    if (curState && curState.frames.length > curState.frameIndex && this.spriteInfo.sheet && this.alpha > 0.0) {
+      centerX = Math.round((this.bounds.l + (0.5 - anchorX) * this.bounds.w) / this.spriteInfo.scale.x);
+      centerY = Math.round((this.bounds.t + (0.5 - anchorY) * this.bounds.h) / this.spriteInfo.scale.y);
+
+      destX = centerX - Math.round(0.5 * this.bounds.w);
+      destY = centerY - Math.round(0.5 * this.bounds.h);
 
       if (bWantsRestore) {
         ctxt.save();
       }
 
       if (bWantsScale) {
-        dx = (scaleX < 0 ? this.bounds.w * (1.0 - this.spriteInfo.anchor.x) : 0);
-        dy = -(scaleY < 0 ? this.bounds.h * (1.0 - this.spriteInfo.anchor.y) : 0);
-        destX += dx;
-        destY += dy;
-        ctxt.translate(destX, destY);
-        destX = 0;
-        destY = 0;
-        ctxt.scale(scaleX, scaleY);
+        ctxt.scale(this.spriteInfo.scale.x, this.spriteInfo.scale.y);
       }
+
+      ctxt.globalAlpha = this.alpha;
 
       if (typeof curState.frames[curState.frameIndex] === "number") {
         // Assume frame format of single number is 1D index into frames.
@@ -471,6 +617,15 @@ jb.sprites = {
         frameInfo = curState.frames[curState.frameIndex];
         this.spriteInfo.sheet.draw(ctxt, destX, destY, frameInfo.row, frameInfo.col);
       }
+
+      // DEBUG
+      // ctxt.beginPath();
+      // ctxt.fillStyle = "red";
+      // ctxt.fillRect(centerX - 2, centerY - 2, 4, 4);
+      // ctxt.fillStyle = "blue";
+      // ctxt.fillRect(destX - 2, destY - 2, 4, 4);
+      // ctxt.closePath();
+      // ctxt.stroke();
 
       if (bWantsRestore) {
         ctxt.restore();
@@ -527,7 +682,7 @@ jb.transitions = {
 
     for (iTransitioner=0; iTransitioner<this.transitioners.length; ++iTransitioner) {
       transitioner = this.transitioners[iTransitioner];
-      if (transitioner != null) {
+      if (transitioner !== null) {
         transitioner.transitionerUpdate.apply(transitioner);
       }
     }
@@ -603,7 +758,7 @@ jb.transitions = {
 
     if (!newTransition.bActive || bReset) {
       // Old transition finished or we're resetting it.
-      newTransition.reset(jb.time.now, jb.time.now + duration, jb.time.now, duration, fnUpdate, fnFinalize);
+      newTransition.reset(jb.time.now, jb.time.now + duration, jb.time.now, duration, fnUpdate.bind(this), fnFinalize.bind(this));
     }
     else {
       // Old transition exists and is still active.
@@ -612,7 +767,7 @@ jb.transitions = {
       // start where the last one left off.
       curParam = (newTransition.tNow - newTransition.tStart) / newTransition.duration;
       newTransition.tEnd = newTransition.tNow + (1 - curParam) * duration;
-      newTransition.reset(newTransition.tNow - curParam * duration, newTransition.tEnd, newTransition.tNow, duration, update, finalize);
+      newTransition.reset(newTransition.tNow - curParam * duration, newTransition.tEnd, newTransition.tNow, duration, update.bind(this), finalize.bind(this));
     }
 
     this.transitions.push(newTransition);
@@ -724,6 +879,71 @@ blueprints.mixins["touchable"] = jb.touchables;
 //  888     888   888       o  888       o  888          888       o  888  `88b.  oo     .d8P 
 // o888o   o888o o888ooooood8 o888ooooood8 o888o        o888ooooood8 o888o  o888o 8""88888P'  
 // Helpers //////////////////////////////////////////////////////////////////////////////////
+
+///////////////////////////////////////////////////////////////////////////////
+// tileSheet Object
+///////////////////////////////////////////////////////////////////////////////
+jb.tileSheetObj = function(source, top, left, rows, cols, cellDx, cellDy) {
+  this.source = source;
+  this.top = top;
+  this.left = left;
+  this.rows = rows;
+  this.cols = cols;
+  this.cellDx = cellDx;
+  this.cellDy = cellDy;
+};
+
+jb.tileSheetObj.prototype.draw = function(ctxt, destX, destY, cellRow, cellCol) {
+  if (arguments.length < 5) {
+    // Assume cellRow is actually a 1D array index into the sheet.
+    cellCol = cellRow % this.cols;
+    cellRow = Math.floor(cellRow / this.cols);
+  }
+
+  ctxt.drawImage(this.source,
+                 this.left + cellCol * this.cellDx,
+                 this.top + cellRow * this.cellDy,
+                 this.cellDx,
+                 this.cellDy,
+                 destX,
+                 destY,
+                 this.cellDx,
+                 this.cellDy);
+};
+
+jb.tileSheetObj.prototype.drawTile = function(ctxt, top, left, destRow, destCol, cellRow, cellCol) {
+  if (arguments.length < 7) {
+    // Assume cellRow is actually a 1D array index into the sheet.
+    cellCol = cellRow % this.cols;
+    cellRow = Math.floor(cellRow / this.cols);
+  }
+
+  ctxt.drawImage(this.source,
+                 this.left + cellCol * this.cellDx,
+                 this.top + cellRow * this.cellDy,
+                 this.cellDx,
+                 this.cellDy,
+                 left + destCol * this.cellDx,
+                 top + destRow * this.cellDy,
+                 this.cellDx,
+                 this.cellDy);
+}
+
+jb.tileSheetObj.prototype.getCellWidth = function() {
+  return this.cellDx;
+};
+
+jb.tileSheetObj.prototype.getCellHeight = function() {
+  return this.cellDy;
+};
+
+jb.tileSheetObj.prototype.getNumCells = function() {
+  return this.rows * this.cols;
+};
+
+///////////////////////////////////////////////////////////////////////////////
+// Array Utilities
+///////////////////////////////////////////////////////////////////////////////
 jb.removeFromArray = function(theArray, theElement, bPreserveOrder) {
     var index = theArray.indexOf(theElement),
         i = 0;
@@ -744,7 +964,9 @@ jb.removeFromArray = function(theArray, theElement, bPreserveOrder) {
     }
 };
 
-// RequestAnimFrame ////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
+// requestAnimationFrame
+///////////////////////////////////////////////////////////////////////////////
 // http://paulirish.com/2011/requestanimationframe-for-smart-animating/
 // http://my.opera.com/emoller/blog/2011/12/20/requestanimationframe-for-smart-er-animating
  
@@ -776,7 +998,16 @@ jb.removeFromArray = function(theArray, theElement, bPreserveOrder) {
         };
 }());
 
+///////////////////////////////////////////////////////////////////////////////
+// ooo        ooooo       .o.       ooooooooooooo ooooo   ooooo 
+// `88.       .888'      .888.      8'   888   `8 `888'   `888' 
+//  888b     d'888      .8"888.          888       888     888  
+//  8 Y88. .P  888     .8' `888.         888       888ooooo888  
+//  8  `888'   888    .88ooo8888.        888       888     888  
+//  8    Y     888   .8'     `888.       888       888     888  
+// o8o        o888o o88o     o8888o     o888o     o888o   o888o 
 // Math ///////////////////////////////////////////////////////////////////////
+
 // Cubic Splines --------------------------------------------------------------
 jb.MathEx = {};
 jb.MathEx.cubic = function(a, b, c, d, u) {
@@ -959,6 +1190,9 @@ jb.bounds.prototype.set = function(left, top, width, height) {
     this.l = left || 0;
     this.w = width || 0;
     this.h = height || 0;
+
+    this.halfWidth = Math.round(this.w * 0.5);
+    this.halfHeight = Math.round(this.h * 0.5);
 };
 
 jb.bounds.prototype.contain = function(x, y) {
@@ -971,6 +1205,8 @@ jb.bounds.prototype.copy = function(dest) {
     dest.l = this.l;
     dest.w = this.w;
     dest.h = this.h;
+    dest.halfWidth = this.halfWidth;
+    dest.halfHeight = this.halfHeight;
 };
 
 jb.bounds.prototype.scale = function(sx, sy) {
@@ -981,6 +1217,8 @@ jb.bounds.prototype.scale = function(sx, sy) {
     this.l *= xScale;
     this.w *= xScale;
     this.h *= yScale;
+    this.halfWidth = Math.round(this.w * 0.5);
+    this.halfHeight = Math.round(this.h * 0.5);
 };
 
 jb.bounds.prototype.moveTo = function(left, top) {
@@ -996,11 +1234,17 @@ jb.bounds.prototype.moveBy = function(dl, dt) {
 jb.bounds.prototype.resizeTo = function(width, height) {
     this.w = width;
     this.h = height;
+
+    this.halfWidth = Math.round(this.w * 0.5);
+    this.halfHeight = Math.round(this.h * 0.5);
 };
 
 jb.bounds.prototype.resizeBy = function(dw, dh) {
     this.w += dw;
     this.h += dh;
+
+    this.halfWidth = Math.round(this.w * 0.5);
+    this.halfHeight = Math.round(this.h * 0.5);
 };
 
 jb.bounds.prototype.intersects = function(other) {
@@ -1166,6 +1410,7 @@ jb.end = function() {
 // Interal Methods /////////////////////////////////////////////////////////////
 jb.loop = function() {
     jb.updateTimers();
+    jb.stateMachines.update();
     jb.transitions.update();
 
     if (jb.bInterrupt) {
@@ -1261,7 +1506,7 @@ jb.updateTimers = function() {
         lastTime = jb.time.now;
 
     jb.time.now = Date.now();
-    jb.time.deltaTimeMS = jb.time.now - lastTime;
+    jb.time.deltaTimeMS = (jb.time.now - lastTime);
     jb.time.deltaTime = jb.time.deltaTimeMS * 0.001;
 
     for (key in jb.timers) {
@@ -1565,7 +1810,7 @@ jb.pointInfo = {x:0, y:0, srcElement:null};
 jb.readLine = function() {
     var retVal = "";
 
-    if (jb.inputState != jb.INPUT_STATES.READ_LINE) {
+    if (jb.inputState !== jb.INPUT_STATES.READ_LINE) {
         jb.minCol = jb.col;
     }
 
