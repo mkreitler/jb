@@ -454,7 +454,8 @@ jb.sprites = {
       frameTime: 0.0,
       anchor: {x: 0.0, y: 0.0},
       state: null,
-      scale: {x: 1.0, y: 1.0}
+      scale: {x: 1.0, y: 1.0},
+      bVisible: true
     };
   },
 
@@ -483,6 +484,14 @@ jb.sprites = {
     for (key in stateObj) {
       this.spriteInfo.states[key] = stateObj[key];
     }
+  },
+
+  spriteHide: function() {
+    this.spriteInfo.bVisible = false;
+  },
+
+  spriteShow: function() {
+    this.spriteInfo.bVisible = true;
   },
 
   spriteSetAnchor: function(x, y) {
@@ -591,7 +600,7 @@ jb.sprites = {
         dx = 0,
         dy = 0;
 
-    if (curState && curState.frames.length > curState.frameIndex && this.spriteInfo.sheet && this.alpha > 0.0) {
+    if (this.spriteInfo.bVisible && curState && curState.frames.length > curState.frameIndex && this.spriteInfo.sheet && this.alpha > 0.0) {
       centerX = Math.round((this.bounds.l + (0.5 - anchorX) * this.bounds.w) / this.spriteInfo.scale.x);
       centerY = Math.round((this.bounds.t + (0.5 - anchorY) * this.bounds.h) / this.spriteInfo.scale.y);
 
@@ -911,7 +920,7 @@ jb.tileSheetObj.prototype.draw = function(ctxt, destX, destY, cellRow, cellCol) 
                  this.cellDy);
 };
 
-jb.tileSheetObj.prototype.drawTile = function(ctxt, top, left, destRow, destCol, cellRow, cellCol) {
+jb.tileSheetObj.prototype.drawTile = function(ctxt, left, top, destRow, destCol, cellRow, cellCol) {
   if (arguments.length < 7) {
     // Assume cellRow is actually a 1D array index into the sheet.
     cellCol = cellRow % this.cols;
@@ -2180,18 +2189,8 @@ window.addEventListener("touchend", jb.touchEnd, true);
 jb.fonts = {
     DEFAULT_SIZE: 16,
 
-    print: function(fontName, text, color, hAlign, vAlign, scale) {
-        jb.fonts.printAt(fontName, jb.row + 1, jb.col + 1, text, color, hAlign, vAlign, scale);        
-    },
-
-    printAt: function(fontName, newRow, newCol, text, color, hAlign, vAlign, scale) {
-        var x = 0,
-            y = 0,
-            row = -1,
-            col = -1,
-            charSet = null,
-            iRow = 0,
-            iCol = 0,
+    drawAt: function(fontName, x, y, text, color, hAlign, vAlign, scale) {
+        var charSet = null,
             iChar = 0,
             curChar = null,
             fontChar = null,
@@ -2209,30 +2208,6 @@ jb.fonts = {
             if (charSet.bCaseless) {
                 text = text.toUpperCase();
             }
-
-            if (newRow > 0) {
-                row = newRow - 1;
-            }
-            else {
-                newRow = jb.row;
-            }
-
-            if (newCol > 0) {
-                col = newCol - 1;
-            }
-            else {
-                newCol = jb.col;
-            }
-
-            cr = text.indexOf(jb.NEWLINE) === text.length - 1;
-            
-            if (cr) {
-                text = text.replace(jb.NEWLINE, "");
-            }
-            
-            // Assume top-left alignment.
-            x = jb.xFromCol(col);
-            y = jb.yFromRow(row);
 
             // Compensate for desired alignment.
             y += scale * this.DEFAULT_SIZE * (0.5 + (vAlign - 0.5)); 
@@ -2262,6 +2237,44 @@ jb.fonts = {
             }
 
             jb.ctxt.restore()
+       }
+    },
+
+    print: function(fontName, text, color, hAlign, vAlign, scale) {
+        jb.fonts.printAt(fontName, jb.row + 1, jb.col + 1, text, color, hAlign, vAlign, scale);        
+    },
+
+    printAt: function(fontName, newRow, newCol, text, color, hAlign, vAlign, scale) {
+        var x = 0,
+            y = 0,
+            row = jb.row,
+            col = jb.col,
+            charSet = null,
+
+        charSet = jb.fonts[fontName];
+
+        if (text && charSet) {   
+            cr = text.indexOf(jb.NEWLINE) === text.length - 1;
+            
+            if (newRow > 0) {
+                row = newRow - 1;
+            }
+            else {
+                newRow = jb.row;
+            }
+
+            if (newCol > 0) {
+                col = newCol - 1;
+            }
+            else {
+                newCol = jb.col;
+            }
+
+            // Assume top-left alignment.
+            x = jb.xFromCol(col);
+            y = jb.yFromRow(row);
+
+            jb.fonts.drawAt(fontName, x, y, text, color, hAlign, vAlign, scale);
             
             col += text.length * scale;
             if (cr) {
