@@ -11,17 +11,23 @@ jb.program = {
     readoutParticle: null,
     player: null,
     monster: null,
+    lootParticles: {unused: [], used: []},
     cameraZoomTime: 1.0,  // NOT constant!
     GROW_PHASE_TIME: 0.1,
     FADE_PHASE_TIME: 0.33,
     CAMERA_FADE_TIME: 0.5,
     CAMERA_WHITEOUT_TIME: 0.3,
+    NUM_LOOT_PARTICLES: 100,
+    LOOT_WIDTH: 16,
+
+    lpID: 0,
 
     start: function() {
         this.spriteImages["dungeonTiles"] = resources.loadImage("oryx_16bit_fantasy_world_trans.png", "./res/fantasy art/");
         this.spriteImages["creatureTiles"] = resources.loadImage("oryx_16bit_fantasy_creatures_trans.png", "./res/fantasy art/");
         this.spriteImages["FXtiles"] = resources.loadImage("oryx_16bit_fantasy_fx_trans.png", "./res/fantasy art/");
         this.spriteImages["slashParticle"] = resources.loadImage("singleSlash.png", "./res/particles/");
+        this.spriteImages["lootTiles"] = resources.loadImage("oryx_16bit_fantasy_items_trans.png", "./res/fantasy art/");
     },
 
     do_waitForResources: function() {
@@ -39,6 +45,14 @@ jb.program = {
         jb.setViewScale(2);
         jb.setViewOrigin(0, jb.canvas.height / 2);
 
+        this.tiles["dungeon01"] = jb.sprites.addSheet("dungeon01", this.spriteImages["dungeonTiles"], 24, 24, 1, 27, 24, 24);
+        this.tiles["creature01"] = jb.sprites.addSheet("creature01", this.spriteImages["creatureTiles"], 24, 24, 18, 22, 24, 24);
+        this.tiles["fx_24x24"] = jb.sprites.addSheet("fx_24x24", this.spriteImages["FXtiles"], 24, 24, 20, 10, 24, 24);
+        this.tiles["fx_32x32"] = jb.sprites.addSheet("fx_32x32", this.spriteImages["FXtiles"], 288, 32, 11, 8, 32, 32);
+        this.tiles["slashParticle"] = jb.sprites.addSheet("slashParticle", this.spriteImages["slashParticle"], 0, 0, 1, 1, 192, 3);
+        this.tiles["slashCreatures"] = jb.sprites.addSheet("slashParticle", this.spriteImages["slashParticle"], 24, 24, 1, 1, 24, 12);
+        this.tiles["loot"] = jb.sprites.addSheet("loot", this.spriteImages["lootTiles"], 16, 16, 14, 22, 16, 16);
+
         this.createPlayerObject();
         this.createMonsterObject();
         this.createCameraManager();
@@ -47,13 +61,7 @@ jb.program = {
         this.createSlashParticle();
         this.createSpurtParticle();
         this.createReadoutParticle();
-
-        this.tiles["dungeon01"] = jb.sprites.addSheet("dungeon01", this.spriteImages["dungeonTiles"], 24, 24, 1, 27, 24, 24);
-        this.tiles["creature01"] = jb.sprites.addSheet("creature01", this.spriteImages["creatureTiles"], 24, 24, 18, 22, 24, 24);
-        this.tiles["fx_24x24"] = jb.sprites.addSheet("fx_24x24", this.spriteImages["FXtiles"], 24, 24, 20, 10, 24, 24);
-        this.tiles["fx_32x32"] = jb.sprites.addSheet("fx_32x32", this.spriteImages["FXtiles"], 288, 32, 11, 8, 32, 32);
-        this.tiles["slashParticle"] = jb.sprites.addSheet("slashParticle", this.spriteImages["slashParticle"], 0, 0, 1, 1, 192, 3);
-        this.tiles["slashCreatures"] = jb.sprites.addSheet("slashParticle", this.spriteImages["slashParticle"], 0, 0, 1, 1, 24, 12);
+        this.createLootParticles();
 
         knightIdle = jb.sprites.createState([{row: 0, col: 0}, {row: 1, col: 0}], 0.33, false, null);
         beholderIdle = jb.sprites.createState([{row: 12, col: 4}, {row: 13, col: 4}], 0.33, false, null);
@@ -130,7 +138,7 @@ jb.program = {
         this.updateScene();
         this.drawScene();
 
-        jb.until(jb.tap.done);
+        jb.until(jb.tap.done && this.lootParticles.used.length === 0);
     },
 
     endWaitForTransitions: function() {
@@ -138,18 +146,70 @@ jb.program = {
     },
 
     // Helper Functions ///////////////////////////////////////////////////////
+    getDropX: function(iCur, iMax) {
+      // TODO: generalize this method to work with any source and target.
+      var dx = this.monster.bounds.l - (this.player.startX + this.player.bounds.w + this.LOOT_WIDTH),
+          dist = Math.round(dx * iCur / iMax);
+
+          dist += dx / iMax * Math.random();
+
+      return Math.round(this.player.startX + this.player.bounds.w + this.LOOT_WIDTH * 0.5 + dist - (this.monster.bounds.l + this.monster.bounds.halfWidth));
+    },
+
+    dropLoot: function(nDrops) {
+      var i = 0,
+          item = null,
+          distX;
+
+      for (i=0; i<nDrops; ++i) {
+        distX = this.getDropX(i, nDrops);
+        item = this.getNextFreeLoot();
+        item.emitAt(this.monster.bounds.l + this.monster.bounds.halfWidth,
+                    this.monster.bounds.t + this.monster.bounds.halfHeight,
+                    distX,
+                    this.monster.bounds.t + this.monster.bounds.h,
+                    "goldCoin");
+      }
+    },
+
+    getNextFreeLoot: function() {
+      var newLoot = null;
+
+      if (this.lootParticles.unused.length) {
+        newLoot = this.lootParticles.unused.pop();
+      }
+      else {
+        newLoot = this.lootParticles.used.shift();
+      }
+
+      this.lootParticles.used.push(newLoot);
+
+      return newLoot;
+    },
+
+    collectLoot: function(collectedLoot) {
+      // TODO: call the "collection" function to
+      // add loot to player's inventory, etc.
+
+      jb.removeFromArray(this.lootParticles.used, collectedLoot, true);
+      this.lootParticles.unused.push(collectedLoot)
+    },
+
     updateScene: function() {
       this.dustParticle.spriteUpdate(jb.time.deltaTime);      
       this.slashParticle.spriteUpdate(jb.time.deltaTime);
       this.spurtParticle.spriteUpdate(jb.time.deltaTime);
+      this.updateLootParticles(jb.time.deltaTime);
       this.player.spriteUpdate(jb.time.deltaTime);
       this.monster.spriteUpdate(jb.time.deltaTime);
     },
 
     drawScene: function() {
       jb.clear();
+
       this.dungeonCard.drawAt(jb.ctxt, 0, jb.canvas.height / 2);
       this.dustParticle.spriteDraw(jb.ctxt);
+      this.drawLootParticles(jb.ctxt);
       this.player.spriteDraw(jb.ctxt);
       this.monster.spriteDraw(jb.ctxt);
       this.spurtParticle.spriteDraw(jb.ctxt);
@@ -158,9 +218,210 @@ jb.program = {
       this.cameraManager.draw(jb.ctxt);
     },
 
+    updateLootParticles: function(dt) {
+      var i = 0;
+
+      for (i=0; i<this.lootParticles.used.length; ++i) {
+        that = this.lootParticles.used[i];
+        this.lootParticles.used[i].spriteUpdate(dt);
+      }
+    },
+
+    drawLootParticles: function(ctxt) {
+      var i = 0,
+          bounds = null;
+
+      for (i=0; i<this.lootParticles.used.length; ++i) {
+        this.lootParticles.used[i].spriteDraw(jb.ctxt);
+
+        // DEBUG        
+        // this.lootParticles.used[i].bounds.draw("green");
+
+        // jb.ctxt.strokeStyle = "yellow";
+        // jb.ctxt.beginPath();
+
+        // bounds = this.player.bounds;
+        // jb.ctxt.moveTo(bounds.l + bounds.halfWidth, bounds.t + bounds.halfHeight);
+
+        // bounds = this.lootParticles.used[i].bounds;
+        // jb.ctxt.lineTo(bounds.l + bounds.halfWidth, bounds.t + bounds.halfHeight);
+
+        // jb.ctxt.closePath();
+        // jb.ctxt.stroke();
+      }
+    },
+
     ///////////////////////////////////////////////////////////////////////////
     // Game Objects
     ///////////////////////////////////////////////////////////////////////////
+    createLootParticles: function() {
+      var i = 0;
+
+      blueprints.draft(
+        "lootParticle",
+
+        // Data
+        {
+          bounces: 0,
+          position: {x:0, y:0},
+          velocity: {x:0, y:0},
+          endX: 0,
+          startY: 0,
+          endY: 0,
+          lifetime: 0,
+
+          GRAVITY: 80,
+          COLLECT_DY: 50,
+          FADE_IN_TIME: 0.33,
+          X_VELOCITY: -40,
+          ELASTICITY: -0.33,
+          MAX_BOUNCES: 3,
+          COLLECT_TIME: 0.5,
+          TIME_MULTIPLIER: 3.5,
+          DIST_MULTIPLIER: 0.8,
+        },
+
+        // Methods
+        {
+          onCreate: function(stateName, sheet, row, col) {
+            var lootState = null,
+                states = {};
+
+            this.spriteSetSheet(sheet);
+
+            lootState = jb.sprites.createState([{row: 3, col: 8}], 1, true, null);
+
+            states[stateName] = lootState;
+            this.spriteAddStates(states);
+            this.spriteSetAnchor(0.5, 1.0);
+            this.spriteHide();
+
+            this.onTouchedFn = this.onTouched;
+          },
+
+          onTouched: function() {
+            this.stateMachineStart(this.collectedState);
+          },
+
+          emitAt: function(x, y, xDist, yFloor, state) {
+            var flightTime = 0;
+
+            this.startY = y + this.bounds.halfHeight;
+            this.endY = yFloor;
+            this.spriteMoveTo(x, this.startY);
+            this.position.x = x;
+            this.position.y = y;
+
+            this.bounces = 0;
+
+            // Compute the velocity needed to reach the
+            // destination in the desired time.
+            xDist *= this.DIST_MULTIPLIER;
+            flightTime = Math.abs(xDist / this.X_VELOCITY);
+            this.endX = x + xDist;
+            this.velocity.x = this.X_VELOCITY;
+
+            // Y = Yo + VoyT + 1/2gT^2
+            // (Y - Yo) - 1/2gT^2 = VoyT
+            // Voy = ((Y- Yo) - 1/2gT^2) / T
+            this.velocity.y = (this.endY - this.startY - 0.5 * this.GRAVITY * flightTime * flightTime) / flightTime;
+
+            this.stateMachineStart(this.dropState);
+            this.spriteSetState(state);
+          },
+
+          dropState: {
+            enter: function() {
+              this.lifetime = 0;
+              this.spriteSetAlpha(0.0);
+              this.spriteShow();
+            },
+
+            update: function(dt) {
+              var newAlpha = 0,
+                  oldVy = this.velocity.y,
+                  dy = 0;
+
+              dt *= this.TIME_MULTIPLIER;
+
+              this.lifetime += dt;
+              this.id = this.id;
+
+              newAlpha = Math.min(1.0, this.lifetime / this.FADE_IN_TIME);
+              this.spriteSetAlpha(newAlpha);
+
+              this.position.x += this.velocity.x * dt;
+
+              this.velocity.y += this.GRAVITY * dt;
+              dy = (oldVy + this.velocity.y) * 0.5 * dt;
+
+              if (this.position.y + dy >= this.endY) {
+                if (this.bounces < this.MAX_BOUNCES) {
+                  this.velocity.y *= this.ELASTICITY;
+                  this.position.y = this.endY - (this.position.y + dy - this.endY) * this.ELASTICITY;
+                  this.bounces += 1;
+                }
+                else {
+                  this.position.y = this.endY;
+                  this.stateMachineStop();
+                }
+              }
+              else {
+                this.position.y += dy;
+              }
+
+              this.spriteMoveTo(Math.round(this.position.x), Math.round(this.position.y));
+            },
+
+            exit: function() {
+              // this.spriteMoveTo(this.endX, this.endY);
+              this.spriteSetAlpha(1.0);
+            }
+          },
+
+          collectedState: {
+            enter: function() {
+              this.spriteSetAlpha(1.0);
+              this.startY = this.bounds.t + this.bounds.h;
+              this.endY = this.startY - this.COLLECT_DY;
+              this.lifetime = 0;
+            },
+
+            update: function(dt) {
+              var param = 0;
+
+              this.lifetime += dt;
+              param = Math.min(this.lifetime / this.COLLECT_TIME, 1.0);
+              param = Math.sin(param * Math.PI * 0.5);
+              param = Math.max(0.0, 1.0 - param * param);
+
+              this.spriteSetAlpha(param);
+              this.spriteMoveTo(this.bounds.l + this.bounds.halfWidth, this.startY * param + this.endY * (1.0 - param));
+
+              if (Math.abs(param) < jb.EPSILON) {
+                this.stateMachineStop();
+              }
+            },
+
+            exit: function() {
+              jb.program.collectLoot(this);
+              this.spriteSetAlpha(0);
+              this.spriteHide();
+            }
+          }
+        }
+      );
+
+      blueprints.make("lootParticle", "sprite");
+      blueprints.make("lootParticle", "touchable");
+      blueprints.make("lootParticle", "stateMachine");
+      blueprints.make("lootParticle", "transitioner");
+
+      for (i=0; i<this.NUM_LOOT_PARTICLES; ++i) {
+        this.lootParticles.unused.push(blueprints.build("lootParticle", "goldCoin", "loot", 3, 8));
+      }
+    },
+
     createReadoutParticle: function() {
       blueprints.draft(
         "readoutParticle",
@@ -326,6 +587,10 @@ jb.program = {
               target: null,
               bMetTarget: false,
               bLeftTarget: false,
+              damageDone: 0,
+
+              BASE_DAMAGE: 10,
+              DAMAGE_RANGE: 10,
             },
 
             // Methods
@@ -369,12 +634,14 @@ jb.program = {
                   if (this.target && !this.bLeftTarget && this.bounds.l + this.bounds.w > this.target.bounds.l + this.target.bounds.w) {
                     this.bLeftTarget = true;
                     jb.program.spurtParticle.emitAt(this.target.bounds.l + this.target.bounds.halfWidth, this.target.bounds.t + this.target.bounds.halfHeight);
-                    jb.program.readoutParticle.emitAt(10 + Math.round(Math.random() * 10), this.target.bounds.l + this.target.bounds.halfWidth, this.target.bounds.t, "red");
+                    this.damageDone = this.BASE_DAMAGE + Math.round(Math.random() * this.DAMAGE_RANGE);
+                    jb.program.readoutParticle.emitAt(this.damageDone, this.target.bounds.l + this.target.bounds.halfWidth, this.target.bounds.t, "red");
                   }
                 },
 
                 finalizeDash: function() {
                   this.spriteMoveTo(this.target.bounds.l + 2 * this.bounds.w, this.bounds.t);
+                  jb.program.dropLoot(this.damageDone - Math.round(this.BASE_DAMAGE + this.DAMAGE_RANGE * 0.5));
                 },
 
                 startReset: function() {

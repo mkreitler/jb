@@ -184,7 +184,7 @@ blueprints = {
               args.push(arguments[i]);
             }
 
-            instance = Object.create(template.proto, template.data);
+            instance = Object.create(template.proto, JSON.parse(JSON.stringify(template.data)));
 
             for (i=0; i<template.proto._components.length; ++i) {
                 mixin = blueprints.mixins[template.proto._components[i]];
@@ -512,8 +512,8 @@ jb.sprites = {
   },
 
   spriteMoveTo: function(x, y) {
-    this.bounds.l = x;
-    this.bounds.t = y;
+    this.bounds.l = Math.round(x - this.spriteInfo.anchor.x * this.bounds.w);
+    this.bounds.t = Math.round(y - this.spriteInfo.anchor.y * this.bounds.h);
   },
 
   spriteMoveBy: function(dx, dy) {
@@ -601,11 +601,11 @@ jb.sprites = {
         dy = 0;
 
     if (this.spriteInfo.bVisible && curState && curState.frames.length > curState.frameIndex && this.spriteInfo.sheet && this.alpha > 0.0) {
-      centerX = Math.round((this.bounds.l + (0.5 - anchorX) * this.bounds.w) / this.spriteInfo.scale.x);
-      centerY = Math.round((this.bounds.t + (0.5 - anchorY) * this.bounds.h) / this.spriteInfo.scale.y);
+      centerX = Math.round((this.bounds.l + this.bounds.halfWidth) / this.spriteInfo.scale.x);
+      centerY = Math.round((this.bounds.t + this.bounds.halfHeight) / this.spriteInfo.scale.y);
 
-      destX = centerX - Math.round(0.5 * this.bounds.w);
-      destY = centerY - Math.round(0.5 * this.bounds.h);
+      destX = centerX - this.bounds.halfWidth;
+      destY = centerY - this.bounds.halfHeight;
 
       if (bWantsRestore) {
         ctxt.save();
@@ -850,6 +850,10 @@ jb.touchables = {
         if (!instance.touchLayer) {
             instance.touchLayer = 0;
         }
+
+        if (!instance.onTouchedFn) {
+          instance.onTouchedFn = null;
+        }
     },
 
     getTouched: function(screenX, screenY) {
@@ -861,6 +865,9 @@ jb.touchables = {
         for (i=jb.touchables.instances.length - 1; i>=0; --i) {
             if (jb.touchables.instances[i].bounds.contain(x, y)) {
                 touched = jb.touchables.instances[i];
+                if (touched.onTouchedFn) {
+                  touched.onTouchedFn.call(touched, screenX, screenY);
+                }
                 break;
             }
         }
@@ -874,7 +881,6 @@ jb.touchables = {
     // the specified prototypes.
     // e.g.:
     //     touchableGetLayer: function() { .. },
-
 };
 
 blueprints.mixins["touchable"] = jb.touchables;
@@ -2255,7 +2261,7 @@ jb.fonts = {
 
         if (text && charSet) {   
             cr = text.indexOf(jb.NEWLINE) === text.length - 1;
-            
+
             if (newRow > 0) {
                 row = newRow - 1;
             }
