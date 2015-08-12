@@ -386,6 +386,10 @@ jb.stateMachines = {
     }
   },
 
+  stateMachineIsInState: function(testState) {
+    return testState === this.smCurrentState;
+  },
+
   stateMachineStop: function() {
     jb.assert(this.smCurrentState, "State machine already stopped");
     jb.assert(jb.stateMachines.updating.indexOf(this) >= 0, "State machine not in update list!");
@@ -813,20 +817,7 @@ jb.touchables = {
             bInserted = false;
 
         jb.touchables.makeInstance(instance);
-
-        for (i=0; i<jb.touchables.instances.length; ++i) {
-            if (instance.touchLayer < jb.touchables.instances[i].touchLayer) {
-                // Insert the instance at this point.
-                // TODO: replace 'splice' with an optimizable function.                
-                jb.touchables.splice(i, 0, instance);
-                bInserted = true;
-                break;
-            }
-        }
-
-        if (!bInserted) {
-            jb.touchables.instances.push(instance);
-        }
+        jb.touchables.instances.unshift(instance);
     },
 
     destroy: function(instance) {
@@ -881,9 +872,130 @@ jb.touchables = {
     // the specified prototypes.
     // e.g.:
     //     touchableGetLayer: function() { .. },
+    touchableSetLayer: function(newLayer) {
+      if (jb.touchables.instances.indexOf(this) >= 0) {
+        jb.removeFromArray(jb.touchables.instances, this, true);
+      }
+
+      this.touchLayer = Math.max(0, newLayer);
+
+      for (i=0; i<jb.touchables.instances.length; ++i) {
+          if (instance.touchLayer <= jb.touchables.instances[i].touchLayer) {
+              // Insert the instance at this point.
+              // TODO: replace 'splice' with an optimizable function.                
+              jb.touchables.splice(i, 0, instance);
+              bInserted = true;
+              break;
+          }
+      }
+
+      if (!bInserted) {
+          jb.touchables.instances.push(instance);
+      }
+    }
 };
 
 blueprints.mixins["touchable"] = jb.touchables;
+
+///////////////////////////////////////////////////////////////////////////////
+// Swipeables -----------------------------------------------------------------
+///////////////////////////////////////////////////////////////////////////////
+jb.swipeables = {
+    // Blueprint Interface ////////////////////////////////////////////////////
+    spawn: function(instance) {
+        var i = 0,
+            bInserted = false;
+
+        jb.swipeables.makeInstance(instance);
+
+        if (!bInserted) {
+            jb.swipeables.instances.push(instance);
+        }
+    },
+
+    destroy: function(instance) {
+        var index = jb.swipeables.instances.indexOf(instance);
+
+        // Remove the instance from the instances array.
+        // TODO: replace 'splice' with an optimizable function.
+        if (index >= 0) {
+            jb.swipeables.instances.splice(index, 1);
+        }
+    },
+
+    // 'Swipeables' Implementation ////////////////////////////////////////////
+    instances: [],
+
+    makeInstance: function(instance) {
+        if (!instance.bounds) {
+            instance.bounds = new jb.bounds(0, 0, 0, 0);
+        }
+
+        instance.touchLayer = 0;
+        instance.swipeableActive = true;
+
+        if (!instance.onTouchedFn) {
+          instance.onTouchedFn = null;
+        }
+    },
+
+    getSwiped: function() {
+        var i,
+            swiped = null,
+            sx = jb.screenToWorldX(jb.swipe.lastX),
+            sy = jb.screenToWorldY(jb.swipe.lastY),
+            ex = jb.screenToWorldX(jb.swipe.endX),
+            ey = jb.screenToWorldY(jb.swipe.endY);
+
+        jb.swipe.allSwiped.length = 0;
+
+        for (i=jb.swipeables.instances.length - 1; i>=0; --i) {
+            if (jb.swipeables.instances[i].swipeableActive && (jb.swipeables.instances[i].bounds.intersectLine(sx, sy, ex, ey))) {
+              swiped = jb.swipeables.instances[i];
+
+              jb.swipe.allSwiped.push(swiped);
+
+              if (jb.swipe.swiped.indexOf(swiped) < 0) {
+                jb.swipe.swiped.push(swiped);
+
+                if (swiped.onSwiped) {
+                  swiped.onSwiped.call(swiped);
+                }
+              }
+            }
+        }
+    },
+
+    // Mixins ---------------------------------------------
+    // All "mixin" functions must start with the prefix
+    // "swipeable" in order to flag their inclusion into
+    // the specified prototypes.
+    // e.g.:
+    //     swipeableGetLayer: function() { .. },
+    swipeableSetLayer: function(newLayer) {
+      if (jb.swipeables.instances.indexOf(this) >= 0) {
+        jb.removeFromArray(jb.swipeables.instances, this, true);
+      }
+
+      this.swipeLayer = Math.max(0, newLayer);
+
+      for (i=0; i<jb.swipeables.instances.length; ++i) {
+          if (instance.swipeLayer <= jb.swipeables.instances[i].swipeLayer) {
+              // Insert the instance at this point.
+              // TODO: replace 'splice' with an optimizable function.                
+              jb.swipeables.splice(i, 0, instance);
+              bInserted = true;
+              break;
+          }
+      }
+
+      if (!bInserted) {
+          jb.swipeables.instances.push(instance);
+      }
+    }
+};
+
+blueprints.mixins["swipeable"] = jb.swipeables;
 
 /////////////////////////////////////////////////////////////////////////////////////////////
 // ooooo   ooooo oooooooooooo ooooo        ooooooooo.   oooooooooooo ooooooooo.    .oooooo.o 
@@ -908,11 +1020,30 @@ jb.tileSheetObj = function(source, top, left, rows, cols, cellDx, cellDy) {
   this.cellDy = cellDy;
 };
 
-jb.tileSheetObj.prototype.draw = function(ctxt, destX, destY, cellRow, cellCol) {
+jb.tileSheetObj.prototype.draw = function(ctxt, destX, destY, cellRow, cellCol, rotation) {
+  var offsetX = 0,
+      offsetY = 0,
+      dx = 0,
+      dy = 0;
+
   if (arguments.length < 5) {
     // Assume cellRow is actually a 1D array index into the sheet.
     cellCol = cellRow % this.cols;
     cellRow = Math.floor(cellRow / this.cols);
+  }
+
+  if (rotation) {
+    offsetX = Math.round(this.cellDx * 0.5);
+    offsetY = Math.round(this.cellDy * 0.5);
+
+    dx = destX + offsetX;
+    dy = destY + offsetY;
+
+    ctxt.translate(dx, dy);
+    destX = -offsetX;
+    destY = -offsetY;
+
+    ctxt.rotate(rotation);
   }
 
   ctxt.drawImage(this.source,
@@ -924,6 +1055,11 @@ jb.tileSheetObj.prototype.draw = function(ctxt, destX, destY, cellRow, cellCol) 
                  destY,
                  this.cellDx,
                  this.cellDy);
+
+  if (rotation) {
+    ctxt.rotate(-rotation);
+    ctxt.translate(-dx, -dy);
+  }
 };
 
 jb.tileSheetObj.prototype.drawTile = function(ctxt, left, top, destRow, destCol, cellRow, cellCol) {
@@ -1022,9 +1158,31 @@ jb.removeFromArray = function(theArray, theElement, bPreserveOrder) {
 //  8    Y     888   .8'     `888.       888       888     888  
 // o8o        o888o o88o     o8888o     o888o     o888o   o888o 
 // Math ///////////////////////////////////////////////////////////////////////
+jb.MathEx = {};
+
+jb.MathEx.linesIntersect = function(x11, y11, x12, y12, x21, y21, x22, y22) {
+    var vx1121 = x21 - x11,  // First point in segment 1 to first point in segment 2, x-coord.
+        vy1121 = y21 - y11,  // First point in segment 1 to first point in segment 2, y-coord.
+        vx1122 = x22 - x11,  // First point in segment 1 to second point in segment 2, x-coord.
+        vy1122 = y22 - y11,  // First point in segment 1 to second point in segment 2, y-coord.
+        c1 = vx1121 * vy1122 - vx1122 * vy1121,
+        vx1221 = x21 - x12, // Second point in segment 1 to first point in segment 2, x-coord.
+        vy1221 = y21 - y12, // Second point in segment 1 to first point in segment 2, y-coord.
+        vx1222 = x22 - x12, // Second point in segment 1 to second point in segment 2, x-coord.
+        vy1222 = y22 - y12, // Second point in segment 1 to second point in segment 2, y-coord.
+        c2 = vx1221 * vy1222 - vx1222 * vy1221,
+        c3 = 1,
+        c4 = 1;
+
+        if (c1 * c2 <= 0.0) {
+          c3 = vx1121 * vy1221 - vy1121 * vx1221;
+          c4 = vx1122 * vy1222 - vy1122 * vx1222;
+        }
+
+        return c3 * c4 <= 0.0;
+};
 
 // Cubic Splines --------------------------------------------------------------
-jb.MathEx = {};
 jb.MathEx.cubic = function(a, b, c, d, u) {
    this.a = a;
    this.b = b;
@@ -1173,6 +1331,59 @@ jb.MathEx.Spline3D.prototype.getPoint = function(position) {
           z: this.zCubics[cubicNum].getValueAt(cubicPos)};
 };
 
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// ooo        ooooo oooooooooooo  .oooooo..o  .oooooo..o       .o.         .oooooo.    oooooooooooo  .oooooo..o      
+// `88.       .888' `888'     `8 d8P'    `Y8 d8P'    `Y8      .888.       d8P'  `Y8b   `888'     `8 d8P'    `Y8      
+//  888b     d'888   888         Y88bo.      Y88bo.          .8"888.     888            888         Y88bo.           
+//  8 Y88. .P  888   888oooo8     `"Y8888o.   `"Y8888o.     .8' `888.    888            888oooo8     `"Y8888o.       
+//  8  `888'   888   888    "         `"Y88b      `"Y88b   .88ooo8888.   888     ooooo  888    "         `"Y88b      
+//  8    Y     888   888       o oo     .d8P oo     .d8P  .8'     `888.  `88.    .88'   888       o oo     .d8P      
+// o8o        o888o o888ooooood8 8""88888P'  8""88888P'  o88o     o8888o  `Y8bood8P'   o888ooooood8 8""88888P' 
+// Messages ///////////////////////////////////////////////////////////////////////////////////////////////////
+jb.messages = {
+  registry: {},
+
+  listen: function(message, listener) {
+    var listeners = null;
+
+    if (!this.registry[message]) {
+      this.registry[message] = [];
+    }
+
+    listeners = this.registry[message];
+
+    if (listeners.indexOf(listener) < 0) {
+      listeners.push(listener);
+    }
+  },
+
+  unlisten: function(listener) {
+    if (this.registry[message] && this.registry[message].indexOf(listener) >= 0) {
+      jb.removeFromArray(this.registry[message], listener, true);
+    }
+  },
+
+  send: function(message) {
+    var i = 0,
+        listener = null,
+        args = [];
+
+    if (this.registry[message]) {
+      for (i=1; i<arguments.length; ++i) {
+        args.push(arguments[i]);
+      }
+
+      for (i=0; i<this.registry[message].length; ++i) {
+        listener = this.registry[message][i];
+
+        if (listener) {
+          listener[message].apply(listener, args);
+        }
+      }
+    }
+  }
+}    
+
 ///////////////////////////////////////////////////////////////////////////////
 // ooooooooooooo oooooo   oooo ooooooooo.   oooooooooooo  .oooooo.o 
 // 8'   888   `8  `888.   .8'  `888   `Y88. `888'     `8 d8P'    `Y8 
@@ -1213,6 +1424,17 @@ jb.bounds.prototype.set = function(left, top, width, height) {
 jb.bounds.prototype.contain = function(x, y) {
     return this.l <= x && this.l + this.w >= x &&
            this.t <= y && this.t + this.h >= y;
+};
+
+jb.bounds.prototype.intersectLine = function(sx, sy, ex, ey) {
+  return jb.MathEx.linesIntersect(sx, sy, ex, ey, this.l, this.t, this.l + this.w, this.t) ||
+         jb.MathEx.linesIntersect(sx, sy, ex, ey, this.l + this.w, this.t, this.l + this.w, this.t + this.h) ||
+         jb.MathEx.linesIntersect(sx, sy, ex, ey, this.l + this.w, this.t + this.h, this.l, this.t + this.h) ||
+         jb.MathEx.linesIntersect(sx, sy, ex, ey, this.l, this.t + this.h, this.l, this.t) ||
+         // These last two tests shouldn't be necessary, but inaccuracies in the above four
+         // tests might make them necessary.
+         this.contain(sx, sy) ||
+         this.contain(ex, ey);
 };
 
 jb.bounds.prototype.copy = function(dest) {
@@ -1262,11 +1484,11 @@ jb.bounds.prototype.resizeBy = function(dw, dh) {
     this.halfHeight = Math.round(this.h * 0.5);
 };
 
-jb.bounds.prototype.intersects = function(other) {
+jb.bounds.prototype.intersect = function(other) {
     var bInLeftRight = false,
         bInTopBottom = false;
 
-    jb.assert(other, "jb.bounds.intersects: invalid 'other'!");
+    jb.assert(other, "jb.bounds.intersect: invalid 'other'!");
 
     if (this.l < other.l) {
         bInLeftRight = other.l <= this.l + this.w;
@@ -2036,7 +2258,7 @@ jb.getClientPos = function(touch) {
 };
 
 jb.tap = {bListening: false, x: -1, y: -1, done: false, isDoubleTap: false, lastTapTime: 0, touched: null};
-jb.swipe = {bListening: false, startX: -1, startY: -1, endX: -1, endY: -1, startTime: 0, endTime: 0, touched: null, done: false};
+jb.swipe = {bListening: false, startX: -1, startY: -1, lastX: -1, lastY: -1, endX: -1, endY: -1, startTime: 0, endTime: 0, swiped: [], allSwiped: [], done: false};
 
 jb.listenForTap = function() {
     jb.resetTap();
@@ -2061,6 +2283,8 @@ jb.listenForSwipe = function() {
 jb.resetSwipe = function() {
     jb.swipe.startX = -1;
     jb.swipe.startY = -1;
+    jb.swipe.lastX = -1;
+    jb.swipe.lastY = -1;
     jb.swipe.endX = -1;
     jb.swipe.endY = -1;
     jb.swipe.startTime = 0;
@@ -2112,10 +2336,13 @@ jb.gestureStart = function() {
     if (jb.swipe.bListening) {
         jb.swipe.startX = x;
         jb.swipe.startY = y;
+        jb.swipe.lastX = x;
+        jb.swipe.lastY = y;
         jb.swipe.endX = x;
         jb.swipe.endY = y;
         jb.swipe.startTime = newNow;
-        jb.swipe.touched = jb.touchables.getTouched(x, y);
+        jb.swipe.swiped.length = 0;
+        jb.swipe.allSwiped.length = 0;
         jb.swipe.started = true;
         jb.swipe.done = false;
     }
@@ -2123,17 +2350,25 @@ jb.gestureStart = function() {
 
 jb.gestureContinue = function() {
     if (jb.swipe.startTime) {
+        jb.swipe.lastX = jb.swipe.endX;
+        jb.swipe.lastY = jb.swipe.endY;
         jb.swipe.endX = jb.pointInfo.x;
         jb.swipe.endY = jb.pointInfo.y;
+
+        jb.swipeables.getSwiped(jb.swipe.lastX, jb.swipe.lastY, jb.swipe.endX, jb.swipe.endY);
     }
 };
 
 jb.gestureEnd = function() {
     if (jb.swipe.startTime) {
+        jb.swipe.lastX = jb.swipe.endX;
+        jb.swipe.lastY = jb.swipe.endY;
         jb.swipe.endX = jb.pointInfo.x
         jb.swipe.endY = jb.pointInfo.y;
         jb.swipe.endTime = Date.now();
         jb.swipe.done = true;
+
+        jb.swipeables.getSwiped(jb.swipe.lastX, jb.swipe.lastY, jb.swipe.endX, jb.swipe.endY);
     }
 };
 

@@ -45,6 +45,8 @@ jb.program = {
         jb.setViewScale(2);
         jb.setViewOrigin(0, jb.canvas.height / 2);
 
+        jb.messages.listen("dropLoot", this);
+
         this.tiles["dungeon01"] = jb.sprites.addSheet("dungeon01", this.spriteImages["dungeonTiles"], 24, 24, 1, 27, 24, 24);
         this.tiles["creature01"] = jb.sprites.addSheet("creature01", this.spriteImages["creatureTiles"], 24, 24, 18, 22, 24, 24);
         this.tiles["fx_24x24"] = jb.sprites.addSheet("fx_24x24", this.spriteImages["FXtiles"], 24, 24, 20, 10, 24, 24);
@@ -131,6 +133,7 @@ jb.program = {
     },
 
     listenForTap: function() {
+        jb.listenForSwipe();
         jb.listenForTap();
     },
 
@@ -162,7 +165,7 @@ jb.program = {
           distX;
 
       for (i=0; i<nDrops; ++i) {
-        distX = this.getDropX(i, nDrops);
+        distX = this.getDropX(nDrops - i - 1, nDrops);
         item = this.getNextFreeLoot();
         item.emitAt(this.monster.bounds.l + this.monster.bounds.halfWidth,
                     this.monster.bounds.t + this.monster.bounds.halfHeight,
@@ -192,7 +195,7 @@ jb.program = {
       // add loot to player's inventory, etc.
 
       jb.removeFromArray(this.lootParticles.used, collectedLoot, true);
-      this.lootParticles.unused.push(collectedLoot)
+      this.lootParticles.unused.push(collectedLoot);
     },
 
     updateScene: function() {
@@ -269,6 +272,10 @@ jb.program = {
           startY: 0,
           endY: 0,
           lifetime: 0,
+          snatchSheet: null,
+          snatchStates: null,
+          snatchX: 0,
+          snatchY: 0,
 
           GRAVITY: 80,
           COLLECT_DY: 50,
@@ -279,11 +286,12 @@ jb.program = {
           COLLECT_TIME: 0.5,
           TIME_MULTIPLIER: 3.5,
           DIST_MULTIPLIER: 0.8,
+          SNATCH_ROTATION: 2 * Math.PI,
         },
 
         // Methods
         {
-          onCreate: function(stateName, sheet, row, col) {
+          onCreate: function(stateName, sheet, row, col, snatchSheet, snatchStates) {
             var lootState = null,
                 states = {};
 
@@ -297,9 +305,39 @@ jb.program = {
             this.spriteHide();
 
             this.onTouchedFn = this.onTouched;
+
+            if (this.auxDraw === null) {
+              this.auxDraw = this.spriteDraw;
+              this.spriteDraw = this.overrideDraw;
+            }
+
+            this.snatchSheet = snatchSheet;
+            this.snatchStates = snatchStates;
           },
 
-          onTouched: function() {
+          auxDraw: null,
+
+          overrideDraw: function(ctxt) {
+            this.auxDraw(ctxt);
+
+            if (this.stateMachineIsInState(this.collectedState)) {
+              this.drawSnatchParticle(ctxt);
+            }
+          },
+
+          drawSnatchParticle: function(ctxt) {
+            var stage = Math.floor(this.lifetime / this.COLLECT_TIME * this.snatchStates.length),
+                oldAlpha = ctxt.globalAlpha,
+                newAlpha = Math.max(0.0, 1.0 - this.lifetime / this.COLLECT_TIME);
+
+            if (this.snatchSheet && this.snatchStates && stage < this.snatchStates.length) {
+              ctxt.globalAlpha = newAlpha * newAlpha;
+              this.snatchSheet.draw(ctxt, this.snatchX, this.snatchY, this.snatchStates[stage].row, this.snatchStates[stage].col, newAlpha * this.SNATCH_ROTATION);
+              ctxt.globalAlpha = oldAlpha;
+            }
+          },
+
+          onSwiped: function() {
             this.stateMachineStart(this.collectedState);
           },
 
@@ -375,6 +413,7 @@ jb.program = {
 
             exit: function() {
               // this.spriteMoveTo(this.endX, this.endY);
+              this.swipeableActive = true;
               this.spriteSetAlpha(1.0);
             }
           },
@@ -384,7 +423,9 @@ jb.program = {
               this.spriteSetAlpha(1.0);
               this.startY = this.bounds.t + this.bounds.h;
               this.endY = this.startY - this.COLLECT_DY;
-              this.lifetime = 0;
+              this.lifetime = 0,
+              this.snatchX = this.bounds.l + this.bounds.halfWidth - Math.round(this.snatchSheet.getCellWidth() * 0.5),
+              this.snatchY = this.bounds.t + this.bounds.halfHeight - Math.round(this.snatchSheet.getCellHeight() * 0.5);
             },
 
             update: function(dt) {
@@ -405,6 +446,7 @@ jb.program = {
 
             exit: function() {
               jb.program.collectLoot(this);
+              this.swipeableActive = false;
               this.spriteSetAlpha(0);
               this.spriteHide();
             }
@@ -413,12 +455,13 @@ jb.program = {
       );
 
       blueprints.make("lootParticle", "sprite");
-      blueprints.make("lootParticle", "touchable");
+      blueprints.make("lootParticle", "swipeable");
       blueprints.make("lootParticle", "stateMachine");
       blueprints.make("lootParticle", "transitioner");
 
       for (i=0; i<this.NUM_LOOT_PARTICLES; ++i) {
-        this.lootParticles.unused.push(blueprints.build("lootParticle", "goldCoin", "loot", 3, 8));
+        this.lootParticles.unused.push(blueprints.build("lootParticle", "goldCoin", "loot", 3, 8, this.tiles["fx_24x24"], [{row: 19, col: 1}]));
+        this.lootParticles.unused[i].swipeableActive = false;
       }
     },
 
@@ -641,7 +684,7 @@ jb.program = {
 
                 finalizeDash: function() {
                   this.spriteMoveTo(this.target.bounds.l + 2 * this.bounds.w, this.bounds.t);
-                  jb.program.dropLoot(this.damageDone - Math.round(this.BASE_DAMAGE + this.DAMAGE_RANGE * 0.5));
+                  jb.messages.send("dropLoot", this.damageDone - Math.round(this.BASE_DAMAGE + this.DAMAGE_RANGE * 0.5));
                 },
 
                 startReset: function() {
