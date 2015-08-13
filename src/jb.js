@@ -1020,11 +1020,12 @@ jb.tileSheetObj = function(source, top, left, rows, cols, cellDx, cellDy) {
   this.cellDy = cellDy;
 };
 
-jb.tileSheetObj.prototype.draw = function(ctxt, destX, destY, cellRow, cellCol, rotation) {
+jb.tileSheetObj.prototype.draw = function(ctxt, destX, destY, cellRow, cellCol, scale, rotation) {
   var offsetX = 0,
       offsetY = 0,
       dx = 0,
-      dy = 0;
+      dy = 0,
+      bCenter = Math.abs(scale ? scale : 1.0 - 1.0) > jb.EPSILON || rotation;
 
   if (arguments.length < 5) {
     // Assume cellRow is actually a 1D array index into the sheet.
@@ -1032,7 +1033,9 @@ jb.tileSheetObj.prototype.draw = function(ctxt, destX, destY, cellRow, cellCol, 
     cellRow = Math.floor(cellRow / this.cols);
   }
 
-  if (rotation) {
+  if (bCenter) {
+    ctxt.save();
+
     offsetX = Math.round(this.cellDx * 0.5);
     offsetY = Math.round(this.cellDy * 0.5);
 
@@ -1043,7 +1046,13 @@ jb.tileSheetObj.prototype.draw = function(ctxt, destX, destY, cellRow, cellCol, 
     destX = -offsetX;
     destY = -offsetY;
 
-    ctxt.rotate(rotation);
+    if (scale !== 1.0) {
+      ctxt.scale(scale, scale);
+    }
+
+    if (rotation) {
+      ctxt.rotate(rotation);
+    }
   }
 
   ctxt.drawImage(this.source,
@@ -1056,9 +1065,8 @@ jb.tileSheetObj.prototype.draw = function(ctxt, destX, destY, cellRow, cellCol, 
                  this.cellDx,
                  this.cellDy);
 
-  if (rotation) {
-    ctxt.rotate(-rotation);
-    ctxt.translate(-dx, -dy);
+  if (bCenter) {
+    ctxt.restore();
   }
 };
 

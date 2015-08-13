@@ -286,7 +286,7 @@ jb.program = {
           COLLECT_TIME: 0.5,
           TIME_MULTIPLIER: 3.5,
           DIST_MULTIPLIER: 0.8,
-          SNATCH_ROTATION: 2 * Math.PI,
+          SNATCH_ROTATION: .55 * Math.PI,
         },
 
         // Methods
@@ -331,8 +331,8 @@ jb.program = {
                 newAlpha = Math.max(0.0, 1.0 - this.lifetime / this.COLLECT_TIME);
 
             if (this.snatchSheet && this.snatchStates && stage < this.snatchStates.length) {
-              ctxt.globalAlpha = newAlpha * newAlpha;
-              this.snatchSheet.draw(ctxt, this.snatchX, this.snatchY, this.snatchStates[stage].row, this.snatchStates[stage].col, newAlpha * this.SNATCH_ROTATION);
+              ctxt.globalAlpha = Math.sqrt(newAlpha);
+              this.snatchSheet.draw(ctxt, this.snatchX, this.snatchY, this.snatchStates[stage].row, this.snatchStates[stage].col, Math.max(newAlpha, 0.01), newAlpha * this.SNATCH_ROTATION);
               ctxt.globalAlpha = oldAlpha;
             }
           },
