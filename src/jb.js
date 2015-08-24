@@ -1748,6 +1748,10 @@ jb.render = function() {
     jb.screenBufferCtxt.drawImage(jb.canvas, 0, 0);
     jb.screenBufferCtxt.restore();
 
+    if (jb.program && jb.program.drawGUI) {
+      jb.program.drawGUI(jb.screenBufferCtxt);
+    }
+
     // Request a new a update.
     requestAnimationFrame(jb.loop);
 };
@@ -2530,7 +2534,7 @@ window.addEventListener("touchend", jb.touchEnd, true);
 jb.fonts = {
     DEFAULT_SIZE: 16,
 
-    drawAt: function(fontName, x, y, text, color, hAlign, vAlign, scale) {
+    drawToContextAt: function(ctxt, fontName, x, y, text, color, hAlign, vAlign, scale) {
         var charSet = null,
             iChar = 0,
             curChar = null,
@@ -2554,10 +2558,10 @@ jb.fonts = {
             y += scale * this.DEFAULT_SIZE * (0.5 + (vAlign - 0.5)); 
             x -= scale * this.DEFAULT_SIZE * text.length * (0.5 + (hAlign - 0.5));
 
-            jb.ctxt.save();
-            jb.ctxt.fillStyle = color;
-            jb.ctxt.lineWidth = scale;
-            jb.ctxt.strokeStyle = color;
+            ctxt.save();
+            ctxt.fillStyle = color;
+            ctxt.lineWidth = scale;
+            ctxt.strokeStyle = color;
 
             for (iChar=0; iChar<text.length; ++iChar) {
                 curChar = text.charAt(iChar);
@@ -2567,18 +2571,22 @@ jb.fonts = {
 
                     if (fontChar) {
                         image = this.imageForChar(fontChar, color, scale);
-                        jb.ctxt.drawImage(image, x, y);
+                        ctxt.drawImage(image, x, y);
                     }
                     else {
-                        jb.ctxt.rect(x, y, scale * this.DEFAULT_SIZE, scale * this.DEFAULT_SIZE);
+                        ctxt.rect(x, y, scale * this.DEFAULT_SIZE, scale * this.DEFAULT_SIZE);
                     }
                 }
 
                 x += scale * this.DEFAULT_SIZE;
             }
 
-            jb.ctxt.restore()
+            ctxt.restore()
        }
+    },
+
+    drawAt: function(fontName, x, y, text, color, hAlign, vAlign, scale) {
+      this.drawToContextAt(jb.ctxt, fontName, x, y, text, color, hAlign, vAlign, scale);
     },
 
     print: function(fontName, text, color, hAlign, vAlign, scale) {
@@ -3271,7 +3279,7 @@ jb.fonts = {
         },
         3: {
             data: ["................",
-                   "......000000...",
+                   "......000000....",
                    "....0000000000..",
                    "...0000.....000.",
                    "..000.......000.",
@@ -5314,8 +5322,8 @@ jb.fonts = {
 // pair of characters represents a hexidecimal lookup into one of
 // 16 palettes, each of 16 colors. 00 always equals transparency.
 jb.glyphs = {
-    draw: function(sizeStr, glyphName, x, y, scaleX, scaleY) {
-        jb.glyphs.drawToContext(jb.ctxt, sizeStr, glyphName, x, y, scaleX, scaleY);
+    draw: function(sizeStr, glyphName, x, y, scaleX, scaleY, anchorX, anchorY) {
+        jb.glyphs.drawToContext(jb.ctxt, sizeStr, glyphName, x, y, scaleX, scaleY, anchorX, anchorY);
     },
 
     // The top and left values will represent offsets from (0, 0) at
@@ -5385,19 +5393,27 @@ jb.glyphs = {
         }
     },
 
-    drawToContext: function(ctxt, sizeStr, glyphName, x, y, scaleX, scaleY) {
+    drawToContext: function(ctxt, sizeStr, glyphName, x, y, scaleX, scaleY, anchorX, anchorY) {
         var glyphsAtSize = jb.glyphs[sizeStr],
             glyphData = glyphsAtSize ? glyphsAtSize[glyphName] : null,
             sx = scaleX || 1,
             sy = scaleY || 1,
-            key = "" + sx + "x" + sy;
+            key = "" + sx + "x" + sy,
+            image = null;
+
+        anchorX = anchorX ? anchorX : 0;
+        anchorY = anchorY ? anchorY : 0;
 
         if (jb.ctxt && glyphData) {
             if (!glyphData.image || !glyphData.image[key]) {
                 jb.glyphs.init(sizeStr, glyphName, key, sx, sy);
             }
 
-            ctxt.drawImage(glyphData.image[key], x, y);
+            image = glyphData.image[key];
+
+            x = x - Math.round(anchorX * image.width);
+            y = y - Math.round(anchorY * image.height);
+            ctxt.drawImage(image, x, y);
         }
     },
 
@@ -6333,6 +6349,36 @@ jb.glyphs = {
                     ".,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,",
                     ".,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,",
                     ".,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,",
+                    ".,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,",
+        ]
+      },
+      die00: {
+        image : null,
+        defaultBounds: null,
+        pixelData: [
+                    ".,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,",
+                    ".,.,0000000000000000000000000000000000000000.,.,",
+                    ".,00050505050505050505050505050505050505050500.,",
+                    ".,00050505050505050505050505050505050505050500.,",
+                    ".,00050505050505050505050505050505050505050500.,",
+                    ".,00050505050505050505050505050505050505050500.,",
+                    ".,00050505050505050505050505050505050505050500.,",
+                    ".,00050505050505050505050505050505050505050500.,",
+                    ".,00050505050505050505050505050505050505050500.,",
+                    ".,00050505050505050505050505050505050505050500.,",
+                    ".,00050505050505050505050505050505050505050500.,",
+                    ".,00050505050505050505050505050505050505050500.,",
+                    ".,00050505050505050505050505050505050505050500.,",
+                    ".,00050505050505050505050505050505050505050500.,",
+                    ".,00050505050505050505050505050505050505050500.,",
+                    ".,00050505050505050505050505050505050505050500.,",
+                    ".,00050505050505050505050505050505050505050500.,",
+                    ".,00050505050505050505050505050505050505050500.,",
+                    ".,00050505050505050505050505050505050505050500.,",
+                    ".,00050505050505050505050505050505050505050500.,",
+                    ".,00050505050505050505050505050505050505050500.,",
+                    ".,00050505050505050505050505050505050505050500.,",
+                    ".,.,0000000000000000000000000000000000000000.,.,",
                     ".,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,.,",
         ]
       },

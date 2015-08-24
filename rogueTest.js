@@ -237,9 +237,19 @@ jb.program = {
       this.spurtParticle.spriteDraw(jb.ctxt);
       this.readoutParticle.draw(jb.ctxt);
       this.slashParticle.spriteDraw(jb.ctxt);
-      this.diceBay.draw(jb.ctxt);
+    },
 
-      this.cameraManager.draw(jb.ctxt);
+    drawGUI: function(ctxt) {
+      if (this.diceBay && this.cameraManager) {
+        ctxt.save();
+        ctxt.scale(2, 2);
+
+        this.diceBay.draw(ctxt);
+
+        ctxt.restore();
+        
+        this.cameraManager.draw(ctxt);
+      }
     },
 
     updateLootParticles: function(dt) {
