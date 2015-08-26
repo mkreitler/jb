@@ -842,9 +842,15 @@ jb.touchables = {
             instance.touchLayer = 0;
         }
 
-        if (!instance.onTouchedFn) {
-          instance.onTouchedFn = null;
+        if (!instance.onTouched) {
+          instance.onTouched = null;
         }
+
+        if (!instance.onUntouched) {
+          instance.onUntouched = null;
+        }
+
+        instance.bTouchableEnabled = true;
     },
 
     getTouched: function(screenX, screenY) {
@@ -854,10 +860,10 @@ jb.touchables = {
             y = jb.screenToWorldY(screenY);
 
         for (i=jb.touchables.instances.length - 1; i>=0; --i) {
-            if (jb.touchables.instances[i].bounds.contain(x, y)) {
+            if (jb.touchables.instances[i].bTouchableEnabled && jb.touchables.instances[i].bounds.contain(x, y)) {
                 touched = jb.touchables.instances[i];
-                if (touched.onTouchedFn) {
-                  touched.onTouchedFn.call(touched, screenX, screenY);
+                if (touched.onTouched) {
+                  touched.onTouched.call(touched, screenX, screenY);
                 }
                 break;
             }
@@ -892,6 +898,14 @@ jb.touchables = {
       if (!bInserted) {
           jb.touchables.instances.push(instance);
       }
+    },
+
+    touchableEnable: function() {
+      this.bTouchableEnabled = true;
+    },
+
+    touchableDisable: function() {
+      this.bTouchabelDisabled = false;
     }
 };
 
@@ -932,10 +946,14 @@ jb.swipeables = {
         }
 
         instance.touchLayer = 0;
-        instance.swipeableActive = true;
+        instance.bSwipeableEnabled = true;
 
-        if (!instance.onTouchedFn) {
-          instance.onTouchedFn = null;
+        if (!instance.onTouched) {
+          instance.onTouched = null;
+        }
+
+        if (!instance.onUntouched) {
+          instance.onUntouched = null;
         }
     },
 
@@ -950,7 +968,7 @@ jb.swipeables = {
         jb.swipe.allSwiped.length = 0;
 
         for (i=jb.swipeables.instances.length - 1; i>=0; --i) {
-            if (jb.swipeables.instances[i].swipeableActive && (jb.swipeables.instances[i].bounds.intersectLine(sx, sy, ex, ey))) {
+            if (jb.swipeables.instances[i].bSwipeableEnabled && (jb.swipeables.instances[i].bounds.intersectLine(sx, sy, ex, ey))) {
               swiped = jb.swipeables.instances[i];
 
               jb.swipe.allSwiped.push(swiped);
@@ -992,6 +1010,14 @@ jb.swipeables = {
       if (!bInserted) {
           jb.swipeables.instances.push(instance);
       }
+    },
+
+    swipeableEnable: function() {
+      this.bSwipeableEnabled = true;
+    },
+
+    swipeableDisable: function() {
+      this.bSwipeableEnabled = false;
     }
 };
 
@@ -1350,7 +1376,7 @@ jb.MathEx.Spline3D.prototype.getPoint = function(position) {
 // Messages ///////////////////////////////////////////////////////////////////////////////////////////////////
 jb.messages = {
   registry: {},
-  queryRegistery: {},
+  queryRegistry: {},
   args: [],
 
   listen: function(message, listener) {
@@ -1367,7 +1393,7 @@ jb.messages = {
     }
   },
 
-  answer: function(message, questioner) {
+  answer: function(message, answerer) {
     var answerers = null;
 
     if (!this.queryRegistry[message]) {
@@ -1395,18 +1421,13 @@ jb.messages = {
 
   query: function(message, querier) {
     var i = 0,
-        listener = null;
+        answerer = null;
 
-    if (querier && (typeof querier[message] === "function") && this.queryRegistery[message]) {
-      this.args.length = 0;
-
-      for (i=1; i<arguments.length; ++i) {
-        this.args.push(arguments[i]);
-      }
-
+    if (querier && (typeof querier[message] === "function") && this.queryRegistry[message]) {
       for (i=0; i<this.queryRegistry[message].length; ++i) {
         // Call the querier's function, sending the current listener as the argument.
-        querier[message].call(querier, this.queryRegistry[message][i]);
+        answerer = this.queryRegistry[message][i];
+        querier[message].call(querier, answerer);
       }
     }
   },
@@ -1681,6 +1702,7 @@ jb.goto = function(label) {
             jb.instructions[i].label.toUpperCase() === label) {
             jb.execStack[0].pc = i - 1;
             jb.execStack[0].loopingRoutine = null;
+            jb.bInterrupt = true;
             break;
         }
     }
@@ -1748,7 +1770,7 @@ jb.render = function() {
     jb.screenBufferCtxt.drawImage(jb.canvas, 0, 0);
     jb.screenBufferCtxt.restore();
 
-    if (jb.program && jb.program.drawGUI) {
+    if (jb.program && jb.program.drawGUI && jb.screenBufferCtxt) {
       jb.program.drawGUI(jb.screenBufferCtxt);
     }
 
@@ -2464,15 +2486,29 @@ jb.gestureContinue = function() {
 };
 
 jb.gestureEnd = function() {
-    if (jb.swipe.startTime) {
-        jb.swipe.lastX = jb.swipe.endX;
-        jb.swipe.lastY = jb.swipe.endY;
-        jb.swipe.endX = jb.pointInfo.x
-        jb.swipe.endY = jb.pointInfo.y;
-        jb.swipe.endTime = Date.now();
-        jb.swipe.done = true;
+  var i = 0;
 
-        jb.swipeables.getSwiped(jb.swipe.lastX, jb.swipe.lastY, jb.swipe.endX, jb.swipe.endY);
+    if (jb.tap.touched && jb.tap.touched.onUntouched) {
+      jb.tap.touched.onUntouched(jb.swipe.endX, jb.swipe.endY);
+    }
+
+    if (jb.swipe.startTime) {
+      jb.swipe.lastX = jb.swipe.endX;
+      jb.swipe.lastY = jb.swipe.endY;
+      jb.swipe.endX = jb.pointInfo.x
+      jb.swipe.endY = jb.pointInfo.y;
+      jb.swipe.endTime = Date.now();
+      jb.swipe.done = true;
+
+      jb.swipeables.getSwiped(jb.swipe.lastX, jb.swipe.lastY, jb.swipe.endX, jb.swipe.endY);
+
+      if (jb.swipe.swiped) {
+        for (i=0; i<jb.swipe.swiped.length; ++i) {
+          if (jb.swipe.swiped[i] !== jb.tap.touched && jb.swipe.swiped[i].onUntouched) {
+            jb.swipe.swiped[i].onUntouched(jb.swipe.endX, jb.swipe.endY);
+          }
+        }
+      }
     }
 };
 

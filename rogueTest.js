@@ -14,6 +14,8 @@ jb.program = {
     lootParticles: {unused: [], used: []},
     diceBay: null,
     cameraZoomTime: 1.0,  // NOT constant!
+    bAdventurerAttacking: false,
+
     GROW_PHASE_TIME: 0.1,
     FADE_PHASE_TIME: 0.33,
     CAMERA_FADE_TIME: 0.5,
@@ -30,6 +32,7 @@ jb.program = {
       this.spriteImages["FXtiles"] = resources.loadImage("oryx_16bit_fantasy_fx_trans.png", "./res/fantasy art/");
       this.spriteImages["slashParticle"] = resources.loadImage("singleSlash.png", "./res/particles/");
       this.spriteImages["lootTiles"] = resources.loadImage("oryx_16bit_fantasy_items_trans.png", "./res/fantasy art/");
+      this.spriteImages["dice"] = resources.loadImage("dice.png", "./res/fantasy art/");
     },
 
     do_waitForResources: function() {
@@ -57,12 +60,13 @@ jb.program = {
       this.tiles["slashParticle"] = jb.sprites.addSheet("slashParticle", this.spriteImages["slashParticle"], 0, 0, 1, 1, 192, 3);
       this.tiles["slashCreatures"] = jb.sprites.addSheet("slashCreatures", this.spriteImages["creatureTiles"], 24, 24, 1, 1, 24, 12);
       this.tiles["loot"] = jb.sprites.addSheet("loot", this.spriteImages["lootTiles"], 16, 16, 14, 22, 16, 16);
+      this.tiles["dice"] = jb.sprites.addSheet("dice", this.spriteImages["dice"], 0, 0, 1, 12, 34, 34);
 
       knightIdle = jb.sprites.createState([{row: 0, col: 0}, {row: 1, col: 0}], 0.33, false, null);
       beholderIdle = jb.sprites.createState([{row: 12, col: 4}, {row: 13, col: 4}], 0.33, false, null);
-      beholderAwaitDamage = jb.sprites.createState([{row: 12, col: 4}], 1.0, false, null);
-      dustGrow = jb.sprites.createState([{row: 10 , col: 4}], this.GROW_PHASE_TIME, false, null);
-      dustFade = jb.sprites.createState([{row: 10 , col: 5}], this.FADE_PHASE_TIME, false, null);
+      beholderAwaitDamage = jb.sprites.createState([{row: 12, col: 4}], 0.0, false, null);
+      dustGrow = jb.sprites.createState([{row: 10, col: 4}], 0.0, false, null);
+      dustFade = jb.sprites.createState([{row: 10, col: 5}], 0.0, false, null);
 
       this.adventurer = blueprints.build("adventurer", "creature01", {"idle" : knightIdle}, "idle", 0, 0);
       this.monster = blueprints.build("monster", "creature01", {"idle" : beholderIdle, "awaitDamage" : beholderAwaitDamage}, "idle", 0, 0, 15 + Math.round(Math.random() * 5), this.tiles["slashCreatures"], [{row:24, col: 4}, {row: 25, col: 4}]);
@@ -70,7 +74,7 @@ jb.program = {
       this.slashParticle = blueprints.build("slashParticle", "slashParticle");
       this.spurtParticle = blueprints.build("spurtParticle", "fx_32x32");
       this.readoutParticle = blueprints.build("readoutParticle");
-      this.diceBay = blueprints.build("diceBay", Math.round(jb.canvas.width / (2 * jb.viewScale)), Math.round(jb.canvas.height * 0.875 / jb.viewScale));
+      this.diceBay = blueprints.build("diceBay", "dice", Math.round(jb.canvas.width / (2 * jb.viewScale)), Math.round(jb.canvas.height * 0.875 / jb.viewScale));
 
       for (i=0; i<this.NUM_LOOT_PARTICLES; ++i) {
         this.lootParticles.unused.push(blueprints.build("lootParticle", "goldCoin", "loot", 3, 8, this.tiles["fx_24x24"], [{row: 19, col: 1}]));
@@ -93,6 +97,7 @@ jb.program = {
 
       jb.messages.listen("dropLoot", this);
       jb.messages.listen("resetFight", this);
+      jb.messages.listen("startAdventurerAttack", this);
 
       jb.messages.send("setCombatOrigin",
                        Math.round(jb.canvas.width / (2 * jb.viewScale) - this.dungeonCard.getWidth() / 2),
@@ -101,18 +106,18 @@ jb.program = {
       jb.listenForTap();
     },
 
-    do_waitForPlayerTapped: function() {
+    do_waitForAdventurerAttack: function() {
       this.updateScene();
       this.drawScene();
 
-      jb.until(jb.tap.touched === this.adventurer);
+      jb.until(this.bAdventurerAttacking);
     },
 
     startZoomIn: function() {
       this.cameraManager.startZoomAndScale(this.adventurer.bounds.l- jb.canvas.width * 0.25 / jb.viewScale,
                                            this.adventurer.bounds.t - jb.canvas.height * 0.25 / jb.viewScale,
                                            3);
-      jb.gosub("do_waitForTransitions");
+      jb.gosub("do_WaitForTransitions");
     },
 
     playerAttack: function() {
@@ -120,24 +125,27 @@ jb.program = {
       this.dustParticle.emitAt(this.adventurer.bounds.l + this.adventurer.bounds.halfWidth,
                                this.adventurer.bounds.t + this.adventurer.bounds.halfHeight);
 
-      jb.gosub("do_waitForTransitions");
+      jb.gosub("do_WaitForLootTransitions");
     },
 
     startZoomOut: function() {
       this.cameraManager.startZoomAndScale(0, 0, 2);
       this.adventurer.startReset();
 
-      jb.gosub("do_waitForTransitions");
+      jb.gosub("do_WaitForTransitions");
     },
 
     restart: function() {
-      jb.goto("do_waitForPlayerTapped");
+      this.bAdventurerAttacking = false;
+      jb.messages.send("initDice");
+      jb.goto("do_waitForAdventurerAttack");
     },
 
     // API R&D Area ///////////////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////////////////////
 
     // Subroutines ////////////////////////////////////////////////////////////
+    // ------------------------------------------
     do_WaitForTransitions: function() {
       this.updateScene();
       this.drawScene();
@@ -145,23 +153,62 @@ jb.program = {
       jb.while(jb.transitions.isTransitioning());
     },
 
-    listenForTap: function() {
-      jb.listenForSwipe();
-      jb.listenForTap();
-    },
-
-    do_waitForPlayerTap: function() {
-      this.updateScene();
-      this.drawScene();
-
-      jb.until(jb.tap.done && this.lootParticles.used.length === 0);
-    },
-
     endWaitForTransitions: function() {
       jb.end();
     },
 
+    // ------------------------------------------
+    do_WaitForLootTransitions: function() {
+      this.updateScene();
+      this.drawScene();
+
+      jb.while(jb.transitions.isTransitioning());
+    },
+
+    listenForLootSwipe: function() {
+      jb.listenForSwipe();
+    },
+
+    do_waitForNoLoot: function() {
+      this.updateScene();
+      this.drawScene();
+
+      jb.until(this.lootParticles.used.length === 0);
+    },
+
+    endWaitForSwipeOrNoLoot: function() {
+      jb.end();
+    },
+
+    // ------------------------------------------
+    do_WaitForTransitionsAndGestures: function() {
+      this.updateScene();
+      this.drawScene();
+
+      jb.while(jb.transitions.isTransitioning());
+    },
+
+    listenForGestures: function() {
+      jb.listenForSwipe();
+      jb.listenForTap();
+    },
+
+    do_waitForPlayerGesture: function() {
+      this.updateScene();
+      this.drawScene();
+
+      jb.until(jb.tap.done);
+    },
+
+    endWaitForTransitionsAndGestures: function() {
+      jb.end();
+    },
+
     // Helper Functions ///////////////////////////////////////////////////////
+    startAdventurerAttack: function() {
+      this.bAdventurerAttacking = true;
+    },
+
     resetFight: function() {
       if (this.monster.isDead()) {
         this.monster.reanimate();
@@ -201,10 +248,12 @@ jb.program = {
         newLoot = this.lootParticles.unused.pop();
       }
       else {
+        jb.assert(this.lootParticles.used.length > 0, "Used particles underflow!");
         newLoot = this.lootParticles.used.shift();
       }
 
       this.lootParticles.used.push(newLoot);
+      jb.assert(this.lootParticles.used.length <= 100, "Used particles overflow!");
 
       return newLoot;
     },
@@ -212,9 +261,12 @@ jb.program = {
     collectLoot: function(collectedLoot) {
       // TODO: call the "collection" function to
       // add loot to player's inventory, etc.
+      jb.assert(this.lootParticles.used.length > 0, "Used particles underflow!");
 
       jb.removeFromArray(this.lootParticles.used, collectedLoot, true);
       this.lootParticles.unused.push(collectedLoot);
+
+      jb.assert(this.lootParticles.unused.length <= 100, "Unused particles overflow!");
     },
 
     updateScene: function() {
@@ -240,6 +292,8 @@ jb.program = {
     },
 
     drawGUI: function(ctxt) {
+      jb.assert(ctxt, "Undefined ctxt!");
+
       if (this.diceBay && this.cameraManager) {
         ctxt.save();
         ctxt.scale(2, 2);
@@ -247,7 +301,7 @@ jb.program = {
         this.diceBay.draw(ctxt);
 
         ctxt.restore();
-        
+
         this.cameraManager.draw(ctxt);
       }
     },
@@ -256,7 +310,6 @@ jb.program = {
       var i = 0;
 
       for (i=0; i<this.lootParticles.used.length; ++i) {
-        that = this.lootParticles.used[i];
         this.lootParticles.used[i].spriteUpdate(dt);
       }
     },

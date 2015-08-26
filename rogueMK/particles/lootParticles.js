@@ -78,6 +78,14 @@ rmk.lootParticles = {
         },
 
         onSwiped: function() {
+
+        },
+
+        onSwipedDefault: function() {
+
+        },
+
+        onSwipedWhenDropped: function() {
           this.stateMachineStart(this.collectedState);
         },
 
@@ -89,6 +97,7 @@ rmk.lootParticles = {
           this.spriteMoveTo(x, this.startY);
           this.position.x = x;
           this.position.y = y;
+          this.bActive = true;
 
           this.bounces = 0;
 
@@ -113,6 +122,7 @@ rmk.lootParticles = {
             this.lifetime = 0;
             this.spriteSetAlpha(0.0);
             this.spriteShow();
+            this.onSwiped = this.onSwipedWhenDropped;
           },
 
           update: function(dt) {
@@ -166,6 +176,7 @@ rmk.lootParticles = {
             this.lifetime = 0,
             this.snatchX = this.bounds.l + this.bounds.halfWidth - Math.round(this.snatchSheet.getCellWidth() * 0.5),
             this.snatchY = this.bounds.t + this.bounds.halfHeight - Math.round(this.snatchSheet.getCellHeight() * 0.5);
+            this.onSwiped = this.onSwipedDefault;
           },
 
           draw: function(ctxt) {

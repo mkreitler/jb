@@ -34,6 +34,8 @@ rmk.adventurer = {
             y = y ? y : 0;
 
             this.spriteMoveTo(x, y);
+
+            jb.messages.answer("doesDieOverlap", this);
           },
 
           startDash: function() {
