@@ -9,12 +9,13 @@ jb.program = {
     dustParticle: null,
     spurtParticle: null,
     readoutParticle: null,
-    adventurer: null,
-    monster: null,
+    adventurers: [null, null, null, null],
+    monsters: [null, null, null, null],
     lootParticles: {unused: [], used: []},
     diceBay: null,
     cameraZoomTime: 1.0,  // NOT constant!
     bAdventurerAttacking: false,
+    iAttacker: 0,
 
     GROW_PHASE_TIME: 0.1,
     FADE_PHASE_TIME: 0.33,
@@ -43,8 +44,17 @@ jb.program = {
       var sheets = [],
           i = 0,
           knightIdle = null,
+          rangerIdle = null,
+          thiefIdle = null,
+          mageIdle = null,
           beholderIdle = null,
+          koboldSwordIdle = null,
+          koboldBowIdle = null,
+          lizardmanIdle = null,
           beholderAwaitDamage = null,
+          koboldSwordAwaitDamage = null,
+          koboldBowAwaitDamage = null,
+          lizardmanAwaitDamage = null,
           dustGrow = null,
           dustFade = null,
           slashFade = null;
@@ -63,13 +73,33 @@ jb.program = {
       this.tiles["dice"] = jb.sprites.addSheet("dice", this.spriteImages["dice"], 0, 0, 1, 12, 34, 34);
 
       knightIdle = jb.sprites.createState([{row: 0, col: 0}, {row: 1, col: 0}], 0.33, false, null);
+      rangerIdle = jb.sprites.createState([{row: 0, col: 11}, {row: 1, col: 11}], 0.33, false, null);
+      thiefIdle = jb.sprites.createState([{row: 2, col: 2}, {row: 3, col: 2}], 0.33, false, null);
+      mageIdle = jb.sprites.createState([{row: 0, col: 13}, {row: 1, col: 13}], 0.33, false, null);
+
       beholderIdle = jb.sprites.createState([{row: 12, col: 4}, {row: 13, col: 4}], 0.33, false, null);
+      koboldSwordIdle = jb.sprites.createState([{row: 14, col: 0}, {row: 15, col: 0}], 0.33, false, null);
+      koboldBowIdle = jb.sprites.createState([{row: 14, col: 1}, {row: 15, col: 1}], 0.33, false, null);
+      lizardmanIdle = jb.sprites.createState([{row: 8, col: 9}, {row: 9, col: 9}], 0.33, false, null);
+
       beholderAwaitDamage = jb.sprites.createState([{row: 12, col: 4}], 0.0, false, null);
+      koboldSwordAwaitDamage = jb.sprites.createState([{row: 14, col: 0}], 0.33, false, null);
+      koboldBowAwaitDamage = jb.sprites.createState([{row: 14, col: 1}], 0.33, false, null);
+      lizardmanAwaitDamage = jb.sprites.createState([{row: 8, col: 9}], 0.33, false, null);
+
       dustGrow = jb.sprites.createState([{row: 10, col: 4}], 0.0, false, null);
       dustFade = jb.sprites.createState([{row: 10, col: 5}], 0.0, false, null);
 
-      this.adventurer = blueprints.build("adventurer", "creature01", {"idle" : knightIdle}, "idle", 0, 0);
-      this.monster = blueprints.build("monster", "creature01", {"idle" : beholderIdle, "awaitDamage" : beholderAwaitDamage}, "idle", 0, 0, 15 + Math.round(Math.random() * 5), this.tiles["slashCreatures"], [{row:24, col: 4}, {row: 25, col: 4}]);
+      this.adventurers[0] = blueprints.build("adventurer", "creature01", {"idle" : knightIdle}, "idle", 0, 0);
+      this.adventurers[1] = blueprints.build("adventurer", "creature01", {"idle" : rangerIdle}, "idle", 0, 0);
+      this.adventurers[2] = blueprints.build("adventurer", "creature01", {"idle" : thiefIdle}, "idle", 0, 0);
+      this.adventurers[3] = blueprints.build("adventurer", "creature01", {"idle" : mageIdle}, "idle", 0, 0);
+
+      this.monsters[0] = blueprints.build("monster", "creature01", {"idle" : beholderIdle, "awaitDamage" : beholderAwaitDamage}, "idle", 0, 0, 15 + Math.round(Math.random() * 5), this.tiles["slashCreatures"], [{row:24, col: 4}, {row: 25, col: 4}]);
+      this.monsters[1] = blueprints.build("monster", "creature01", {"idle" : koboldSwordIdle, "awaitDamage" : koboldSwordAwaitDamage}, "idle", 0, 0, 15 + Math.round(Math.random() * 5), this.tiles["slashCreatures"], [{row:24, col: 4}, {row: 25, col: 4}]);
+      this.monsters[2] = blueprints.build("monster", "creature01", {"idle" : koboldBowIdle, "awaitDamage" : koboldBowAwaitDamage}, "idle", 0, 0, 15 + Math.round(Math.random() * 5), this.tiles["slashCreatures"], [{row:24, col: 4}, {row: 25, col: 4}]);
+      this.monsters[3] = blueprints.build("monster", "creature01", {"idle" : lizardmanIdle, "awaitDamage" : lizardmanAwaitDamage}, "idle", 0, 0, 15 + Math.round(Math.random() * 5), this.tiles["slashCreatures"], [{row:24, col: 4}, {row: 25, col: 4}]);
+
       this.dustParticle = blueprints.build("dustParticle", "fx_32x32", {"grow" : dustGrow, "fade" : dustFade}, "grow", 0, 0);
       this.slashParticle = blueprints.build("slashParticle", "slashParticle");
       this.spurtParticle = blueprints.build("spurtParticle", "fx_32x32");
@@ -81,16 +111,21 @@ jb.program = {
         this.lootParticles.unused[i].swipeableActive = false;
       }
 
-      this.adventurer.spriteSetScale(-1, 1);
-      this.adventurer.setTarget(this.monster);
+      for(i=0; i<this.adventurers.length; ++i) {
+        this.adventurers[i].spriteSetScale(-1, 1);
+        this.adventurers[i].setTarget(this.monsters[0]);
+        rmk.adventureParty.addMember(this.adventurers[i]);
+      }
 
       sheets.push(this.tiles["dungeonBack"]);
       sheets.push(this.tiles["dungeonFore"]);
       this.dungeonCard = new rmk.DungeonCard(sheets);
 
       this.dungeonCard.setCard("hallway01");
-      rmk.adventureParty.addMember(this.adventurer);
-      rmk.monsterParty.addMember(this.monster);
+
+      for (i=0; i<this.monsters.length; ++i) {
+        rmk.monsterParty.addMember(this.monsters[i]);
+      }
 
       this.cameraManager = blueprints.build("cameraManager");
       this.cameraManager.startFadeOut();
@@ -114,23 +149,23 @@ jb.program = {
     },
 
     startZoomIn: function() {
-      this.cameraManager.startZoomAndScale(this.adventurer.bounds.l- jb.canvas.width * 0.25 / jb.viewScale,
-                                           this.adventurer.bounds.t - jb.canvas.height * 0.25 / jb.viewScale,
+      this.cameraManager.startZoomAndScale(this.adventurers[this.iAttacker].bounds.l- jb.canvas.width * 0.25 / jb.viewScale,
+                                           this.adventurers[this.iAttacker].bounds.t - jb.canvas.height * 0.25 / jb.viewScale,
                                            3);
       jb.gosub("do_WaitForTransitions");
     },
 
     playerAttack: function() {
-      this.adventurer.startDash();
-      this.dustParticle.emitAt(this.adventurer.bounds.l + this.adventurer.bounds.halfWidth,
-                               this.adventurer.bounds.t + this.adventurer.bounds.halfHeight);
+      this.adventurers[this.iAttacker].startDash();
+      this.dustParticle.emitAt(this.adventurers[this.iAttacker].bounds.l + this.adventurers[this.iAttacker].bounds.halfWidth,
+                               this.adventurers[this.iAttacker].bounds.t + this.adventurers[this.iAttacker].bounds.halfHeight);
 
       jb.gosub("do_WaitForLootTransitions");
     },
 
     startZoomOut: function() {
       this.cameraManager.startZoomAndScale(0, 0, 2);
-      this.adventurer.startReset();
+      this.adventurers[this.iAttacker].startReset();
 
       jb.gosub("do_WaitForTransitions");
     },
@@ -210,19 +245,19 @@ jb.program = {
     },
 
     resetFight: function() {
-      if (this.monster.isDead()) {
-        this.monster.reanimate();
+      if (this.monsters[0].isDead()) {
+        this.monsters[0].reanimate();
       }
     },
 
     getDropX: function(iCur, iMax) {
       // TODO: generalize this method to work with any source and target.
-      var dx = this.monster.bounds.l - (this.adventurer.startX + this.adventurer.bounds.w + this.LOOT_WIDTH),
+      var dx = this.monsters[0].bounds.l - (this.adventurers[this.iAttacker].startX + this.adventurers[this.iAttacker].bounds.w + this.LOOT_WIDTH),
           dist = Math.round(dx * iCur / iMax);
 
           dist += dx / iMax * Math.random();
 
-      return Math.round(this.adventurer.startX + this.adventurer.bounds.w + this.LOOT_WIDTH * 0.5 + dist - (this.monster.bounds.l + this.monster.bounds.halfWidth));
+      return Math.round(this.adventurers[this.iAttacker].startX + this.adventurers[this.iAttacker].bounds.w + this.LOOT_WIDTH * 0.5 + dist - (this.monsters[0].bounds.l + this.monsters[0].bounds.halfWidth));
     },
 
     dropLoot: function(nDrops) {
@@ -233,10 +268,10 @@ jb.program = {
       for (i=0; i<nDrops; ++i) {
         distX = this.getDropX(nDrops - i - 1, nDrops);
         item = this.getNextFreeLoot();
-        item.emitAt(this.monster.bounds.l + this.monster.bounds.halfWidth,
-                    this.monster.bounds.t + this.monster.bounds.halfHeight,
+        item.emitAt(this.monsters[0].bounds.l + this.monsters[0].bounds.halfWidth,
+                    this.monsters[0].bounds.t + this.monsters[0].bounds.halfHeight,
                     distX,
-                    this.monster.bounds.t + this.monster.bounds.h,
+                    this.monsters[0].bounds.t + this.monsters[0].bounds.h,
                     "goldCoin");
       }
     },
@@ -327,7 +362,7 @@ jb.program = {
         // jb.ctxt.strokeStyle = "yellow";
         // jb.ctxt.beginPath();
 
-        // bounds = this.adventurer.bounds;
+        // bounds = this.adventurers[this.iAttacker].bounds;
         // jb.ctxt.moveTo(bounds.l + bounds.halfWidth, bounds.t + bounds.halfHeight);
 
         // bounds = this.lootParticles.used[i].bounds;

@@ -54,13 +54,13 @@ rmk.adventurer = {
               this.bMetTarget = true;
               jb.program.slashParticle.emitAt(this.target.bounds.l + this.target.bounds.halfWidth, this.target.bounds.t + this.target.bounds.halfHeight);
               jb.program.cameraManager.startWhiteIn();
-              jb.messages.send("awaitDamage");
+              jb.messages.send("awaitDamage", this.target);
             }
 
             if (this.target && !this.bLeftTarget && this.bounds.l + this.bounds.w > this.target.bounds.l + this.target.bounds.w) {
               this.bLeftTarget = true;
               this.damageDone = this.BASE_DAMAGE + Math.round(Math.random() * this.DAMAGE_RANGE);
-              jb.messages.send("takeDamage", this.damageDone);
+              jb.messages.send("takeDamage", this.damageDone, this.target);
             }
           },
 

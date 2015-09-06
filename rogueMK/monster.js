@@ -51,25 +51,29 @@ rmk.monster = {
 	              }
 	            },
 
-	            awaitDamage: function() {
-	              this.spriteSetState("awaitDamage");
+	            awaitDamage: function(target) {
+	            	if (target === this) {
+	              	this.spriteSetState("awaitDamage");
+	              }
 	            },
 
-	            takeDamage: function(damage) {
-	              this.health -= damage;
+	            takeDamage: function(damage, target) {
+	            	if (target === this) {
+		              this.health -= damage;
 
-	              jb.program.spurtParticle.emitAt(this.bounds.l + this.bounds.halfWidth, this.bounds.t + this.bounds.halfHeight);
-	              jb.program.readoutParticle.emitAt(damage, this.bounds.l + this.bounds.halfWidth, this.bounds.t, "red");
+		              jb.program.spurtParticle.emitAt(this.bounds.l + this.bounds.halfWidth, this.bounds.t + this.bounds.halfHeight);
+		              jb.program.readoutParticle.emitAt(damage, this.bounds.l + this.bounds.halfWidth, this.bounds.t, "red");
 
-	              if (this.health <= 0) {
-	                this.stateMachineStart(this.deathSequence);
-	              }
-	              else {
-	                if (Math.random() < this.DROP_CHANCE) {
-	                  jb.messages.send("dropLoot", this.DROP_RANGE.low + Math.floor(Math.random() * (this.DROP_RANGE.high - this.DROP_RANGE.low)));
-	                }
-	                this.spriteSetState("idle");
-	              }
+		              if (this.health <= 0) {
+		                this.stateMachineStart(this.deathSequence);
+		              }
+		              else {
+		                if (Math.random() < this.DROP_CHANCE) {
+		                  jb.messages.send("dropLoot", this.DROP_RANGE.low + Math.floor(Math.random() * (this.DROP_RANGE.high - this.DROP_RANGE.low)));
+		                }
+		                this.spriteSetState("idle");
+		              }
+		            }
 	            },
 
 	            isDead: function() {

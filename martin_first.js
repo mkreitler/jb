@@ -2,6 +2,8 @@
 // Resources Test
 ///////////////////////////////////////////////////////////////////////////////
 jb.program = {
+    xb: 1000, 
+    yb: 100,
     x: 50,
     y: 100,
     start: function() {
@@ -11,26 +13,45 @@ jb.program = {
     },
 
     do_loop: function() {
-      var pot;
+        jb.clear();
+        jb.ctxt.fillStyle="blue";
+        jb.ctxt.fillRect(this.x, this.y, 20,20);
+        jb.ctxt.fillStyle="red";
+        jb.ctxt.fillRect(this.xb, this.yb, 20,20);
+         
+        if (jb.keys.isDown("down")) {
+            this.y=this.y+10;
+        }
+           
+        if (jb.keys.isDown("up")) {
+            this.y=this.y-10;
+        }
 
-     pot=jb.readKey();    
-     jb.clear();
-     jb.ctxt.fillStyle="red";
-     jb.ctxt.fillRect(this.x, this.y, 20,20);
+        if (jb.keys.isDown("left")) {
+            this.x=this.x-10;
+        }
 
-     if (pot === "right"){
-         this.x=this.x+10;
-     }
-     else if (pot === "left"){
-     this.x=this.x-10   
-     }
-     else if (pot === "up"){
-     this.y=this.y-10   
-     }
-     else if (pot === "down"){
-     this.y=this.y+10
-     }    
-     jb.until(jb.tap.done);   
+        if (jb.keys.isDown("right")) {
+            this.x=this.x+10;
+        }
+
+        if (jb.keys.isDown("S")) {
+            this.yb=this.yb+10;
+        }
+           
+        if (jb.keys.isDown("W")) {
+            this.yb=this.yb-10;
+        }
+
+        if (jb.keys.isDown("A")) {
+            this.xb=this.xb-10;
+        }
+
+        if (jb.keys.isDown("D")) {
+            this.xb=this.xb+10;
+        }  
+
+        jb.until(false && jb.tap.done);   
     },
 
     end: function() {

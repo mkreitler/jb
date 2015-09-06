@@ -486,7 +486,7 @@ jb.sprites = {
     var key = null;
 
     for (key in stateObj) {
-      this.spriteInfo.states[key] = stateObj[key];
+      this.spriteInfo.states[key] = JSON.parse(JSON.stringify(stateObj[key]));
     }
   },
 
@@ -2170,6 +2170,12 @@ jb.inputState = jb.INPUT_STATES.NONE;
 jb.DOUBLE_TAP_INTERVAL = 333; // Milliseconds
 jb.pointInfo = {x:0, y:0, srcElement:null};
 
+jb.keys = {};
+
+jb.keys.isDown = function(whichKey) {
+  return jb.keys[whichKey] && jb.keys[whichKey].isDown;
+};
+
 jb.readLine = function() {
     var retVal = "";
 
@@ -2267,9 +2273,24 @@ jb.onPress = function(e) {
 jb.onDown = function(e) {
     var keyCode = e.which || e.keyCode,
         specialCode = jb.codes["" + keyCode],
+        lookupCode = null,
         retVal = true;
     
     jb.lastCode = keyCode;
+
+    if (specialCode) {
+      lookupCode = specialCode;
+    }
+    else {
+      lookupCode = String.fromCharCode(keyCode);
+    }
+
+    if (jb.keys[lookupCode]) {
+      jb.keys[lookupCode].isDown = true;
+    }
+    else {
+      jb.keys[lookupCode] = {isDown: true};
+    }
     
     if (specialCode) {
         // User pressed a special key.
@@ -2309,9 +2330,24 @@ jb.onDown = function(e) {
 
 jb.onUp = function(e) {
     var keyCode = e.which || e.keyCode,
-        specialCode = jb.codes["" + keyCode];
+        specialCode = jb.codes["" + keyCode],
+        lookupCode = null;
     
     jb.lastCode = keyCode;
+
+    if (specialCode) {
+      lookupCode = specialCode;
+    }
+    else {
+      lookupCode = String.fromCharCode(keyCode);
+    }
+
+    if (jb.keys[lookupCode]) {
+      jb.keys[lookupCode].isDown = false;
+    }
+    else {
+      jb.keys[lookupCode] = {isDown: false};
+    }
     
     if (specialCode) {
         // User pressed a special key.
