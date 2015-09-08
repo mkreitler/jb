@@ -1149,6 +1149,21 @@ jb.removeFromArray = function(theArray, theElement, bPreserveOrder) {
     }
 };
 
+jb.randomizeArray = function(array) {
+  var i = 0,
+      temp = null,
+      index = 0;
+
+  if (array) {
+    for (i=0; i<array.length; ++i) {
+      index = Math.floor(Math.random() * (array.length - i));
+      temp = array[index];
+      array[index] = array[array.length - i - 1];
+      array[array.length - i - 1] = temp;
+    }
+  }
+};
+
 ///////////////////////////////////////////////////////////////////////////////
 // requestAnimationFrame
 ///////////////////////////////////////////////////////////////////////////////
