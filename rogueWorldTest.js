@@ -83,6 +83,9 @@ jb.program = {
       ANIM_PERIOD: 0.67,
       MASS_VARIANCE: 0.2,
       MIN_MASS_PERCENTAGE: 50,
+      ROUGHAGE: 4,
+      ROUGHAGE_VARIANCE: 3,
+      ROUGHOUT: 4,
       TYPES: {
         "water": {tileSet: "water", row: 3, col: 0, type: "water"},
         "land": {tileSet: "earth", row: 0, col: 3, type: "land"},
@@ -108,6 +111,8 @@ jb.program = {
           flatEarth = [],
           newEarth = [],
           baseBit = 0,
+          roughage = 0,
+          roughout = 0,
           massPercentage = this.TERRAIN.MIN_MASS_PERCENTAGE,
           tileVal = 0;
 
@@ -128,20 +133,8 @@ jb.program = {
         if (row > 0 && row < rows - 1 &&
             col > 0 && col < cols - 1 &&
           this.world.grid[row][col].type === "water") {
-          flatEarth.push({row:row, col:col, tileVal:0});
+          flatEarth.push({row:row, col:col, tileVal:-1});
           this.world.grid[row][col] = flatEarth[flatEarth.length - 1];
-          if (row < bounds.yMin) {
-            bounds.yMin = row;
-          }
-          if (row > bounds.yMax) {
-            bounds.yMax = row;
-          }
-          if (col < bounds.xMin) {
-            bounds.xMin = col;
-          }
-          if (col > bounds.xMax) {
-            bounds.xMax = col;
-          }
           seeds += 1;
         }
       }
@@ -166,21 +159,8 @@ jb.program = {
                 }
 
                 if (Math.floor(Math.random() * 9) < nLand) {
-                  newEarth.push({row: iRow, col: iCol, tileVal:0});
+                  newEarth.push({row: iRow, col: iCol, tileVal:-1});
                   this.world.grid[iRow][iCol] = newEarth[newEarth.length - 1];
-
-                  if (iRow < bounds.yMin) {
-                    bounds.yMin = iRow;
-                  }
-                  if (iRow > bounds.yMax) {
-                    bounds.yMax = iRow;
-                  }
-                  if (iCol < bounds.xMin) {
-                    bounds.xMin = iCol;
-                  }
-                  if (iCol > bounds.xMax) {
-                    bounds.xMax = iCol;
-                  }
                 }
               }
             }
@@ -192,6 +172,142 @@ jb.program = {
         }
 
         newEarth.length = 0;
+      }
+
+      // Roughen edges.
+      // Horizontal first.
+      for (iRow=0; iRow<rows; ++iRow) {
+        dCol = 0;
+        roughage = this.TERRAIN.ROUGHAGE + Math.round(Math.round(Math.random() * 2 - 1) * this.TERRAIN.ROUGHAGE_VARIANCE);
+        for (iCol=0; iCol<cols; ++iCol) {
+          tile = this.world.grid[iRow][iCol];
+          if (tile.tileVal &&
+              this.world.grid[iRow][iCol - 1].tileVal &&
+              this.world.grid[iRow - 1][iCol].type &&
+              this.world.grid[iRow - 1][iCol - 1].type) {
+            dCol += 1;
+
+            if (dCol > roughage) {
+              roughout = Math.round(Math.random() * this.TERRAIN.ROUGHOUT);
+              for (i=0; i<roughout; ++i) {
+                if (iCol + i < cols) {
+                  this.world.grid[iRow][iCol + i] = this.TERRAIN.TYPES["water"];
+                }
+              }
+              roughage = this.TERRAIN.ROUGHAGE + Math.round(Math.round(Math.random() * 2 - 1) * this.TERRAIN.ROUGHAGE_VARIANCE);
+              dCol = 0;
+            }
+          }
+          else {
+            dCol = 0;
+          }
+        }
+      }
+
+      for (iRow=0; iRow<rows; ++iRow) {
+        dCol = 0;
+        roughage = this.TERRAIN.ROUGHAGE + Math.round(Math.round(Math.random() * 2 - 1) * this.TERRAIN.ROUGHAGE_VARIANCE);
+        for (iCol=0; iCol<cols; ++iCol) {
+          tile = this.world.grid[iRow][iCol];
+          if (tile.tileVal &&
+              this.world.grid[iRow][iCol - 1].tileVal &&
+              this.world.grid[iRow + 1][iCol].type &&
+              this.world.grid[iRow + 1][iCol - 1].type) {
+            dCol += 1;
+
+            if (dCol > roughage) {
+              roughout = Math.round(Math.random() * this.TERRAIN.ROUGHOUT);
+              for (i=0; i<roughout; ++i) {
+                if (iCol + i < cols) {
+                  this.world.grid[iRow][iCol + i] = this.TERRAIN.TYPES["water"];
+                }
+              }
+              roughage = this.TERRAIN.ROUGHAGE + Math.round(Math.round(Math.random() * 2 - 1) * this.TERRAIN.ROUGHAGE_VARIANCE);
+              dCol = 0;
+            }
+          }
+          else {
+            dCol = 0;
+          }
+        }
+      }
+
+      // Vertical second.
+      for (iCol=0; iCol<cols; ++iCol) {
+        dRow = 0;
+        roughage = this.TERRAIN.ROUGHAGE + Math.round(Math.round(Math.random() * 2 - 1) * this.TERRAIN.ROUGHAGE_VARIANCE);
+        for (iRow=0; iRow<rows; ++iRow) {
+          tile = this.world.grid[iRow][iCol];
+          if (tile.tileVal &&
+              this.world.grid[iRow - 1][iCol].tileVal &&
+              this.world.grid[iRow][iCol - 1].type &&
+              this.world.grid[iRow - 1][iCol - 1].type) {
+            dRow += 1;
+
+            if (dRow > roughage) {
+              roughout = Math.round(Math.random() * this.TERRAIN.ROUGHOUT);
+              for (i=0; i<roughout; ++i) {
+                if (iRow + i < rows) {
+                  this.world.grid[iRow + i][iCol] = this.TERRAIN.TYPES["water"];
+                }
+              }
+              roughage = this.TERRAIN.ROUGHAGE + Math.round(Math.round(Math.random() * 2 - 1) * this.TERRAIN.ROUGHAGE_VARIANCE);
+              dRow = 0;
+            }
+          }
+          else {
+            dRow = 0;
+          }
+        }
+      }
+
+      for (iCol=0; iCol<cols; ++iCol) {
+        dRow = 0;
+        roughage = this.TERRAIN.ROUGHAGE + Math.round(Math.round(Math.random() * 2 - 1) * this.TERRAIN.ROUGHAGE_VARIANCE);
+        for (iRow=0; iRow<rows; ++iRow) {
+          tile = this.world.grid[iRow][iCol];
+          if (tile.tileVal &&
+              this.world.grid[iRow - 1][iCol].tileVal &&
+              this.world.grid[iRow][iCol + 1].type &&
+              this.world.grid[iRow - 1][iCol + 1].type) {
+            dRow += 1;
+
+            if (dRow > roughage) {
+              roughout = Math.round(Math.random() * this.TERRAIN.ROUGHOUT);
+              for (i=0; i<roughout; ++i) {
+                if (iRow + i < rows) {
+                  this.world.grid[iRow + i][iCol] = this.TERRAIN.TYPES["water"];
+                }
+              }
+              roughage = this.TERRAIN.ROUGHAGE + Math.round(Math.round(Math.random() * 2 - 1) * this.TERRAIN.ROUGHAGE_VARIANCE);
+              dRow = 0;
+            }
+          }
+          else {
+            dRow = 0;
+          }
+        }
+      }
+
+      // Construct bounds.
+      for (iRow=0; iRow<rows; ++iRow) {
+        for (iCol=0; iCol<cols; ++iCol) {
+          tile = this.world.grid[iRow][iCol];
+          if (tile.tileVal) {
+            if (iRow < bounds.yMin) {
+              bounds.yMin = iRow;
+            }
+            if (iRow > bounds.yMax) {
+              bounds.yMax = iRow;
+            }
+            if (iCol < bounds.xMin) {
+              bounds.xMin = iCol;
+            }
+            if (iCol > bounds.xMax) {
+              bounds.xMax = iCol;
+            }
+          }
+        }
       }
 
       // Center.
