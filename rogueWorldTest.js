@@ -29,12 +29,19 @@ jb.program = {
                 ],
 
     start: function() {
+      jb.resize(Math.floor(jb.canvas.width / this.CELL.WIDTH) * this.CELL.WIDTH,
+                Math.floor(jb.canvas.height / this.CELL.HEIGHT) * this.CELL.HEIGHT);
       this.spriteImages["dungeonTiles"] = resources.loadImage("oryx_16bit_fantasy_world_trans.png", "./res/fantasy art/");
+      // jb.listenForTap();
     },
 
     do_waitForResources: function() {
       jb.until(resources.loadComplete());
     },
+
+    // do_waitForDebug: function() {
+    //  jb.until(jb.tap.done);
+    // },
 
     initSprites: function() {
       var sheets = [];
@@ -100,7 +107,7 @@ jb.program = {
           row = 0,
           col = 0,
           pass = 0,
-          bounds = {xMin:cols + 1, xMax:-1, yMin:rows + 1, yMax: -1},
+          bounds = {xMin:Number.MAX_VALUE, xMax:-1, yMin:Number.MAX_VALUE, yMax: -1},
           i = 0,
           seeds = 0,
           nLand = 0,
@@ -113,15 +120,123 @@ jb.program = {
           baseBit = 0,
           roughage = 0,
           roughout = 0,
+          visited = [],
           massPercentage = this.TERRAIN.MIN_MASS_PERCENTAGE,
           tileVal = 0;
 
       // Initialize.
-      this.world = {grid: [], timer: 0, animOffset: 0};
+      this.world = {grid: [], timer: 0, animOffset: 0, landMasses: []};
       for (iRow = 0; iRow < rows; ++iRow) {
         this.world.grid.push([]);
         for (iCol = 0; iCol < cols; ++iCol) {
           this.world.grid[iRow].push(this.TERRAIN.TYPES["water"]);
+        }
+      }
+
+      this.world.addTileToMass = function(bAddLandMass, iRow, iCol, visited) {
+        var tile = this.grid[iRow][iCol],
+            i = 0,
+            id = -1,
+            landMass = null;
+
+          if (tile.tileVal && visited.indexOf(tile) < 0) {
+            if (bAddLandMass) {
+              this.landMasses.push({tiles: [], bounds: {minRow: Number.MAX_VALUE, maxRow: -1, minCol: Number.MAX_VALUE, maxCol: -1}});
+            }
+
+            id = this.landMasses.length - 1;
+
+            visited.push(tile);
+
+            tile.landMass = id;
+            this.landMasses[id].tiles.push(tile);
+
+            this.addTileToMass(false, iRow - 1, iCol, visited);
+            this.addTileToMass(false, iRow, iCol + 1, visited);
+            this.addTileToMass(false, iRow + 1, iCol, visited);
+            this.addTileToMass(false, iRow, iCol - 1, visited);
+          }
+
+          return landMass;
+      };
+
+      this.world.boundLandMasses = function() {
+        var iMass = 0,
+            iTile = 0,
+            mass = null,
+            tile = null;
+
+        for (iMass=0; iMass<this.landMasses.length; ++iMass) {
+          for (iTile=0; iTile<this.landMasses[iMass].tiles.length; ++iTile) {
+            mass = this.landMasses[iMass];
+            tile = mass.tiles[iTile];
+
+            if (tile.row < mass.bounds.minRow) {
+              mass.bounds.minRow = tile.row;
+            }
+
+            if (tile.row > mass.bounds.maxRow) {
+              mass.bounds.maxRow = tile.row;
+            }
+
+            if (tile.col < mass.bounds.minCol) {
+              mass.bounds.minCol = tile.col;
+            }
+
+            if (tile.col > mass.bounds.maxCol) {
+              mass.bounds.maxCol = tile.col;
+            }
+          }
+        }
+      }
+
+      // Define World object.
+      this.world.update = function(dt) {
+        this.timer += dt;
+        this.animOffset = Math.floor(this.timer / jb.program.TERRAIN.ANIM_PERIOD) % 2;
+      }
+
+      this.world.draw = function(ctxt) {
+        var iRow = 0,
+            iCol = 0,
+            row = null,
+            tile = null,
+            x = 0,
+            y = 0,
+            w = 0,
+            h = 0,
+            colors = ["red", "white", "grey", "yellow", "orange", "pink"],
+            tiles = jb.program.tiles;
+
+        if (ctxt && tiles) {
+          for (iRow = 0; iRow < rows; ++iRow) {
+            row = this.grid[iRow];
+            for (iCol = 0; iCol < cols; ++iCol) {
+              tile = row[iCol];
+
+              if (tile.tileVal) {
+                tiles["earth"].draw(ctxt, iCol * jb.program.CELL.WIDTH, iRow * jb.program.CELL.HEIGHT, jb.program.TILE_LOOKUP[tile.tileVal].row, jb.program.TILE_LOOKUP[tile.tileVal].col);
+              }
+              else if (tile.tileSet && tiles[tile.tileSet]) {
+                tiles[tile.tileSet].draw(ctxt, iCol * jb.program.CELL.WIDTH, iRow * jb.program.CELL.HEIGHT, tile.row + (tile.row + this.animOffset) % 2, tile.col);
+              }
+            }
+          }
+
+          // DEBUG: draw land mass bounds.
+          // for (i=0; i<this.landMasses.length; ++i) {
+          //  ctxt.beginPath();
+          //  ctxt.strokeStyle = colors[i];
+
+          //  x = this.landMasses[i].bounds.minCol * jb.program.CELL.WIDTH;
+          //  y = this.landMasses[i].bounds.minRow * jb.program.CELL.HEIGHT;
+          //  w = (this.landMasses[i].bounds.maxCol - this.landMasses[i].bounds.minCol + 1) * jb.program.CELL.WIDTH;
+          //  h = (this.landMasses[i].bounds.maxRow - this.landMasses[i].bounds.minRow + 1) * jb.program.CELL.HEIGHT;
+
+          //  ctxt.rect(x, y, w, h);
+          //  ctxt.closePath();
+          //  ctxt.stroke(); 
+          // }
         }
       }
 
@@ -133,7 +248,7 @@ jb.program = {
         if (row > 0 && row < rows - 1 &&
             col > 0 && col < cols - 1 &&
           this.world.grid[row][col].type === "water") {
-          flatEarth.push({row:row, col:col, tileVal:-1});
+          flatEarth.push({row:row, col:col, tileVal:-1, landMass: null});
           this.world.grid[row][col] = flatEarth[flatEarth.length - 1];
           seeds += 1;
         }
@@ -159,7 +274,7 @@ jb.program = {
                 }
 
                 if (Math.floor(Math.random() * 9) < nLand) {
-                  newEarth.push({row: iRow, col: iCol, tileVal:-1});
+                  newEarth.push({row: iRow, col: iCol, tileVal:-1, landMass: null});
                   this.world.grid[iRow][iCol] = newEarth[newEarth.length - 1];
                 }
               }
@@ -289,6 +404,23 @@ jb.program = {
         }
       }
 
+      // DEBUG TERRAIN: 2x2 island at center of map.
+      /*
+      this.world.grid = [];
+      for (iRow=0; iRow<rows; ++iRow) {
+        this.world.grid.push([]);
+        for (iCol=0; iCol<cols; ++iCol) {
+          if ((iRow === Math.floor(rows / 2) || iRow === Math.floor(rows / 2) + 1) &&
+              (iCol === Math.floor(cols / 2) || iCol === Math.floor(cols / 2) + 1)) {
+            this.world.grid[iRow].push({row: iRow, col: iCol, tileVal:-1, landMass:null});
+          }
+          else {
+            this.world.grid[iRow].push(this.TERRAIN.TYPES["water"]);
+          }
+        }
+      }
+      */
+
       // Construct bounds.
       for (iRow=0; iRow<rows; ++iRow) {
         for (iCol=0; iCol<cols; ++iCol) {
@@ -311,10 +443,20 @@ jb.program = {
       }
 
       // Center.
-      dRow = Math.floor((rows - 2 - (bounds.yMax - bounds.yMin + 1)) * 0.5);
-      dCol = Math.floor((cols - 2 - (bounds.xMax - bounds.xMin + 1)) * 0.5);
+      dRow = Math.floor(rows * 0.5 - (bounds.yMax - bounds.yMin + 1) * 0.5) - bounds.yMin;
+      dCol = Math.floor(cols * 0.5 - (bounds.xMax - bounds.xMin + 1) * 0.5) - bounds.xMin;
 
-      if (dRow > 0) {
+      for (iRow=0; iRow<rows; ++iRow) {
+        for (iCol=0; iCol<cols; ++iCol) {
+          tile = this.world.grid[iRow][iCol];
+          if (tile.tileVal) {
+            tile.row += dRow;
+            tile.col += dCol;
+          }
+        }
+      }
+
+      if (dRow !== 0) {
         if (rows - bounds.yMax > bounds.yMin) {
           // More space at the bottom. Shift down.
           while (dRow > 0) {
@@ -324,25 +466,27 @@ jb.program = {
         }
         else {
           // More space at the top. Shift up.
-          while (dRow > 0) {
+          while (dRow < 0) {
             this.world.grid.push(this.world.grid.shift());
-            dRow -= 1;
+            dRow += 1;
           }
         }
       }
 
-      if (dCol > 0) {
-        for (iRow=0; iRow<rows; ++iRow) {
-          if (cols - bounds.xMax > bounds.xMin) {
-            // More space on the right side. Shift right.
+      if (dCol !== 0) {
+        // More space on the right side. Shift right.
+        while (dCol > 0) {
+          for (iRow=0; iRow<rows; ++iRow) {
             this.world.grid[iRow].unshift(this.world.grid[iRow].pop());
           }
-          else {
-            // More space on the left side. Shift left.
+          dCol -= 1;
+        }
+        // More space on the left side. Shift left.
+        while (dCol < 0) {
+          for (iRow=0; iRow<rows; ++iRow) {
             this.world.grid[iRow].push(this.world.grid[iRow].shift());
           }
-
-          dCol -= 1;
+          dCol += 1;
         }
       }
 
@@ -370,41 +514,17 @@ jb.program = {
         }
       }
 
-      // Define World object.
-      this.world.update = function(dt) {
-        this.timer += dt;
-        this.animOffset = Math.floor(this.timer / jb.program.TERRAIN.ANIM_PERIOD) % 2;
-      }
-
-      this.world.draw = function(ctxt) {
-        var iRow = 0,
-            iCol = 0,
-            row = null,
-            tile = null,
-            tiles = jb.program.tiles;
-
-        if (ctxt && tiles) {
-          for (iRow = 0; iRow < rows; ++iRow) {
-            row = this.grid[iRow];
-            for (iCol = 0; iCol < cols; ++iCol) {
-              tile = row[iCol];
-
-              if (tile.tileVal) {
-                tiles["earth"].draw(ctxt, iCol * jb.program.CELL.WIDTH, iRow * jb.program.CELL.HEIGHT, jb.program.TILE_LOOKUP[tile.tileVal].row, jb.program.TILE_LOOKUP[tile.tileVal].col);
-              }
-              else if (tile.tileSet && tiles[tile.tileSet]) {
-                tiles[tile.tileSet].draw(ctxt, iCol * jb.program.CELL.WIDTH, iRow * jb.program.CELL.HEIGHT, tile.row + (tile.row + this.animOffset) % 2, tile.col);
-              }
-            }
+      // Build land masses.
+      for (iRow=0; iRow<rows; ++iRow) {
+        for (iCol=0; iCol<cols; ++iCol) {
+          if (this.world.grid[iRow][iCol].tileVal &&
+              visited.indexOf(this.world.grid[iRow][iCol]) < 0) {
+            this.world.addTileToMass(true, iRow, iCol, visited);
           }
         }
       }
 
-      // 1) Create the landmass.
-      
-
-      // 2) Seed terrain types into the world.
-      
+      this.world.boundLandMasses();
     },
 
     // Subroutines ////////////////////////////////////////////////////////////

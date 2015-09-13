@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<meta name="viewport" content="width=1024, initial-scale=1, maximum-scale=1, user-scalable=0"/><html>
+<meta name="apple-mobile-web-app-capable" content="yes">
+	
+<head>
+	<title>jb test</title>
+	<style type="text/css">
+		html,body {
+			background-color: #000;
+			color: #fff;
+			font-family: helvetica, arial, sans-serif;
+			margin: 0;
+			padding: 0;
+			font-size: 12pt;
+		}
+	</style>
+</head>
+<body>
+    <!-- Create a div with an id -->
+    <div id="canvasDiv" align="center">
+    	<canvas id="myCanvas" width="200" height="100" style="border:1px solid #000000;">
+		</canvas>
+    </div>
+
+	<script type="text/javascript">
+		// Javascript function that fills the canvas with a blue box.
+		// This would be equivalent to the Unity code that draws the "download" button.
+		// You will never see this because the code below hides it immediately.
+		var ctxt = null,
+			canvas = null;
+
+		// Fill the canvas with a blue rectangle, which you will
+		// (hopefully) never see.
+		canvas = document.getElementById("myCanvas");
+		ctxt = canvas ? canvas.getContext('2d') : null;
+		if (ctxt) {
+			ctxt.fillStyle = "blue";
+			ctxt.fillRect(0, 0, 200, 100);
+		}
+	</script>
+
+	<script type="text/javascript">
+		// Hide the div containing the Unity button
+		// (or, in our case, the canvas element);
+		var div = null,
+			btn = null,
+			btnText = null;
+
+		div = document.getElementById("canvasDiv");
+		if (div) {
+			div.style.display = "none";
+		}
+
+		// Add a button that will take the user to the library download site
+		// (which we will simulate with a link to Google.com).
+		btn = document.createElement("BUTTON");
+		btnText = document.createTextNode("Open URL");
+		btn.appendChild(btnText);
+
+		// Define the function to be executed when the user clicks the button.
+		// 
+		btn.onclick = function() {
+			// Open the URL to the library download...
+
+			// This code unhides the canvas div. This may or may not be useful,
+			// depending on whether you want to re-display the Unity button after download.
+			var div = null;
+
+			div = document.getElementById("canvasDiv");
+			if (div) {
+				div.style.display = "block";
+			}
+
+			// Open a link to the library download (or, for us, Google).
+			// This trick will open the link in either a new page or new tab, depending
+			// on the user's browser (or, might even replace the current page).
+		  	window.open("http://www.google.com", '_blank').focus();
+
+			// To redirect the current page without opening a new window or tab, you
+			// could do this:
+			// window.location.href = 'http://www.google.com';
+		}
+
+		document.body.appendChild(btn);
+	</script>
+</body>
+</html>
