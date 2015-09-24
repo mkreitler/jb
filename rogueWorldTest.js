@@ -54,6 +54,7 @@ jb.program = {
       this.tiles["dungeonFore"] = jb.sprites.addSheet("dungeonFore", this.spriteImages["dungeonTiles"], 696, 24, 1, 27, 24, 24);
       this.tiles["earth"] = jb.sprites.addSheet("earth", this.spriteImages["dungeonTiles"], 696, 384, 19, 25, 24, 24);
       this.tiles["water"] = jb.sprites.addSheet("water", this.spriteImages["dungeonTiles"], 120, 672, 11, 3, 24, 24);
+      this.tiles["terrain"] = jb.sprites.addSheet("terrain", this.spriteImages["dungeonTiles"], 1056, 24, 15, 12, 24, 24);
 
       sheets.push(this.tiles["dungeonBack"]);
       sheets.push(this.tiles["dungeonFore"]);
@@ -125,7 +126,7 @@ jb.program = {
           tileVal = 0;
 
       // Initialize.
-      this.world = {grid: [], timer: 0, animOffset: 0, landMasses: []};
+      this.world = {grid: [], timer: 0, animOffset: 0, landMasses: [], highChanceDecay: 0.7, MAX_MOUNTAIN_SEEDS: 10, BASE_MOUNTAIN_CHANCE: 0.33, HIGH_MOUNTAIN_CHANCE: 0.95, MOUNTAIN_CHANCE_DECAY: 0.8};
       for (iRow = 0; iRow < rows; ++iRow) {
         this.world.grid.push([]);
         for (iCol = 0; iCol < cols; ++iCol) {
@@ -141,7 +142,7 @@ jb.program = {
 
           if (tile.tileVal && visited.indexOf(tile) < 0) {
             if (bAddLandMass) {
-              this.landMasses.push({tiles: [], bounds: {minRow: Number.MAX_VALUE, maxRow: -1, minCol: Number.MAX_VALUE, maxCol: -1}});
+              this.landMasses.push({tiles: [], coordinates: [], bounds: {minRow: Number.MAX_VALUE, maxRow: -1, minCol: Number.MAX_VALUE, maxCol: -1}});
             }
 
             id = this.landMasses.length - 1;
@@ -150,6 +151,7 @@ jb.program = {
 
             tile.landMass = id;
             this.landMasses[id].tiles.push(tile);
+            this.landMasses[id].coordinates.push({row: iRow, col: iCol});
 
             this.addTileToMass(false, iRow - 1, iCol, visited);
             this.addTileToMass(false, iRow, iCol + 1, visited);
@@ -190,6 +192,172 @@ jb.program = {
         }
       }
 
+      this.world.makeMountains = function() {
+        var i = 0,
+            iTile = 0,
+            dx = 0,
+            dy = 0,
+            curX = -1,
+            curY = -1,
+            ix = 0,
+            iy = 0,
+            x = 0,
+            y = 0,
+            tile = null,
+            bAbort = false;
+
+        if (this.landMasses.length > 1) {
+          for (i=0; i<this.landMasses.length; ++i) {
+            if (Math.random() < 0.5) {
+              // Prefers dx.
+              dx = Math.floor(Math.random() * 3) + 1; // 1-3
+              dy = Math.floor(Math.random() * dx); // 0 - dx - 1
+            }
+            else {
+              // Prefers dy.
+              dy = Math.floor(Math.random() * 3) + 1; // 1-3
+              dx = Math.floor(Math.random() * dy); // 0 - dy - 1
+            }
+
+            if (Math.random() < 0.5) {
+              dx *= -1;
+            }
+            if (Math.random() < 0.5) {
+              dy *= -1;
+            }
+
+            // Now have an established direction of travel for this landmass.
+            // Iterate through all points in the land mass and move them along
+            // the direction of travel. Stop if the resulting location is on
+            // the landmass, off the screen, or on another landmass. If on
+            // another landmass, mark that point as a mountain seed.
+            for (iTile=0; iTile<this.landMasses[i].tiles.length; ++iTile) {
+              curX = this.landMasses[i].coordinates[iTile].col;
+              curY = this.landMasses[i].coordinates[iTile].row;
+              bAbort = false;
+
+              while (!bAbort) {
+                y = curY;
+                x = curX;
+
+                if (Math.abs(dx) > Math.abs(dy)) {
+                  for (ix=0; !bAbort && ix<Math.abs(dx); ++ix) {
+                    x += dx > 0 ? 1 : -1;
+                    y += dy > 0 ? Math.abs(dy / dx) : -Math.abs(dy / dx);
+                    spreadDir = Math.random() < 0.5 ? 1 : 3;
+                    bAbort = this.checkTectonics(i, Math.round(y), Math.round(x), this.landMasses[i].coordinates[iTile].row, this.landMasses[i].coordinates[iTile].col, spreadDir);
+                  }
+
+                  curY += dy;
+                  curX += dx;
+                }
+                else {
+                  for (iy=0; !bAbort && iy<Math.abs(dy); ++iy) {
+                    y += dy > 0 ? 1 : -1;
+                    x += dx > 0 ? Math.abs(dx / dy) : -Math.abs(dx / dy);
+                    spreadDir = Math.random() < 0.5 ? 0 : 2;
+                    bAbort = this.checkTectonics(i, Math.round(y), Math.round(x), this.landMasses[i].coordinates[iTile].row, this.landMasses[i].coordinates[iTile].col, spreadDir);
+                  }
+
+                  curY += dy;
+                  curX += dx;
+                }
+              }
+            }
+          }
+        }
+
+        this.highChanceDecay = 0.9;
+        for (i=0; i<this.MAX_MOUNTAIN_SEEDS - this.landMasses.length; ++i) {
+          y = Math.floor(Math.random() * rows);
+          x = Math.floor(Math.random() * cols);
+
+          if (this.grid[y][x].type !== "water") {
+            this.spreadMountains(y, x, Math.floor(Math.random() * 4), this.BASE_MOUNTAIN_CHANCE, this.HIGH_MOUNTAIN_CHANCE);
+          }
+          else {
+            // Try again.
+            i -= 1;
+          }
+        }
+      }
+
+      this.world.spreadMountains = function(row, col, preferredDirection, chanceNorm, chanceHigh) {
+        var landChance = Math.random();
+
+        if (col <= 0 || col >= cols - 1 || row <= 0 || row >= rows - 1) {
+          // Abort if out of bounds.
+        }
+        else if (this.grid[row][col].type === "water") {
+          // Abort if water.
+        }
+        else if (this.grid[row][col].type === "mountain") {
+          // Abort if mountain.
+        }
+        else {
+          this.grid[row][col].type = "mountain";
+
+          // Now try spreading to nearby tiles.
+          if (row > 1 && (landChance < chanceNorm || (preferredDirection === 0 && landChance < chanceHigh))) {
+            this.spreadMountains(row - 1, col, preferredDirection, chanceNorm * this.MOUNTAIN_CHANCE_DECAY, chanceHigh * this.highChanceDecay);
+          }
+
+          landChance = Math.random();
+          if (col < cols - 2 && (landChance < chanceNorm || (preferredDirection - 1 === 0 && landChance < chanceHigh))) {
+            this.spreadMountains(row, col + 1, preferredDirection, chanceNorm * this.MOUNTAIN_CHANCE_DECAY, chanceHigh * this.highChanceDecay);
+          }
+
+          landChance = Math.random();
+          if (row < rows - 2 && (landChance < chanceNorm || (preferredDirection - 2 === 0 && landChance < chanceHigh))) {
+            this.spreadMountains(row + 1, col, preferredDirection, chanceNorm * this.MOUNTAIN_CHANCE_DECAY, chanceHigh * this.highChanceDecay);
+          }
+
+          landChance = Math.random();
+          if (cols > 1 && (landChance < chanceNorm || (preferredDirection - 3 === 0 && landChance < chanceHigh))) {
+            this.spreadMountains(row, col - 1, preferredDirection, chanceNorm * this.MOUNTAIN_CHANCE_DECAY, chanceHigh * this.highChanceDecay);
+          }
+        }
+      }
+
+      this.world.checkTectonics = function(iMass, row, col, startRow, startCol, preferredDirection) {
+        var bAbort = false,
+            tile = null,
+            curRow = null;
+
+        if (col < 0 || col >= cols) {
+          // Out of bounds.
+          bAbort = true;
+        }
+        else if (row < 0 || row >= rows) {
+          // Out of bounds.
+          bAbort = true;
+        }
+        
+        if (!bAbort) {
+          tile = this.grid[row][col];
+
+          if (this.landMasses[iMass].tiles.indexOf(tile) >= 0) {
+            bAbort = true;
+          }
+          else {
+            // Check for collision with other land masses.
+            if (tile.tileVal) {
+              // This is a land tile. It must belong to another landmass,
+              // otherwise, we would have stopped on the previous test.
+              bAbort = true;
+              // tile.type = "mountain";
+
+              // this.grid[startRow][startCol].type = "mountain";
+
+              this.spreadMountains(row, col, preferredDirection, 0, this.HIGH_MOUNTAIN_CHANCE);
+              this.spreadMountains(startRow, startCol, (4 - preferredDirection) % 4, 0, this.HIGH_MOUNTAIN_CHANCE);
+            }
+          }
+        }
+
+        return bAbort;
+      }
+
       // Define World object.
       this.world.update = function(dt) {
         this.timer += dt;
@@ -216,6 +384,10 @@ jb.program = {
 
               if (tile.tileVal) {
                 tiles["earth"].draw(ctxt, iCol * jb.program.CELL.WIDTH, iRow * jb.program.CELL.HEIGHT, jb.program.TILE_LOOKUP[tile.tileVal].row, jb.program.TILE_LOOKUP[tile.tileVal].col);
+
+                if (tile.type === "mountain") {
+                  tiles["terrain"].draw(ctxt, iCol * jb.program.CELL.WIDTH, iRow * jb.program.CELL.HEIGHT, 2, 1);
+                }
               }
               else if (tile.tileSet && tiles[tile.tileSet]) {
                 tiles[tile.tileSet].draw(ctxt, iCol * jb.program.CELL.WIDTH, iRow * jb.program.CELL.HEIGHT, tile.row + (tile.row + this.animOffset) % 2, tile.col);
@@ -525,6 +697,7 @@ jb.program = {
       }
 
       this.world.boundLandMasses();
+      this.world.makeMountains();
     },
 
     // Subroutines ////////////////////////////////////////////////////////////
