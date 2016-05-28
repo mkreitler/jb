@@ -152,7 +152,7 @@ jb.program = {
       this.cameraManager.startZoomAndScale(this.adventurers[this.iAttacker].bounds.l- jb.canvas.width * 0.25 / jb.viewScale,
                                            this.adventurers[this.iAttacker].bounds.t - jb.canvas.height * 0.25 / jb.viewScale,
                                            3);
-      jb.gosub("do_WaitForTransitions");
+      jb.resumeAfter("do_WaitForTransitions");
     },
 
     playerAttack: function() {
@@ -160,14 +160,14 @@ jb.program = {
       this.dustParticle.emitAt(this.adventurers[this.iAttacker].bounds.l + this.adventurers[this.iAttacker].bounds.halfWidth,
                                this.adventurers[this.iAttacker].bounds.t + this.adventurers[this.iAttacker].bounds.halfHeight);
 
-      jb.gosub("do_WaitForLootTransitions");
+      jb.resumeAfter("do_WaitForLootTransitions");
     },
 
     startZoomOut: function() {
       this.cameraManager.startZoomAndScale(0, 0, 2);
       this.adventurers[this.iAttacker].startReset();
 
-      jb.gosub("do_WaitForTransitions");
+      jb.resumeAfter("do_WaitForTransitions");
     },
 
     restart: function() {

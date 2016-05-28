@@ -10,6 +10,54 @@ jb = {
     }
 };
 
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+// oooooo   oooooo     oooo            .o8       oooooo     oooo            o8o                      
+//  `888.    `888.     .8'            "888        `888.     .8'             `"'                      
+//   `888.   .8888.   .8'    .ooooo.   888oooo.    `888.   .8'    .ooooo.  oooo   .ooooo.   .ooooo.  
+//    `888  .8'`888. .8'    d88' `88b  d88' `88b    `888. .8'    d88' `88b `888  d88' `"Y8 d88' `88b 
+//     `888.8'  `888.8'     888ooo888  888   888     `888.8'     888   888  888  888       888ooo888 
+//      `888'    `888'      888    .o  888   888      `888'      888   888  888  888   .o8 888    .o 
+//       `8'      `8'       `Y8bod8P'  `Y8bod8P'       `8'       `Y8bod8P' o888o `Y8bod8P' `Y8bod8P' 
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+
+webVoice = {};
+
+webVoice.get = function() {
+  // alert("Your web browser does not support voice recognition. Please upgrade to Google Chrome 25 or higher.");
+  return false;
+};
+
+webVoice.init = function(fnOnStart, fnOnEnd, fnOnResult, fnOnError, bContinuous, bInterim) {
+  var recog = webVoice.get();
+
+  if (recog) {
+    recog.onstart = fnOnStart;
+    recog.onend = fnOnEnd;
+    recog.onresult = fnOnResult;
+    recog.onerror = fnOnError;
+    recog.continuous = bContinuous ? true : false;
+    recog.interimResults = bInterim ? true : false;
+  }
+};
+
+(function() {
+  var recognition = null;
+
+  if (('webkitSpeechRecognition' in window)) {
+    recognition = new webkitSpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.onstart = null;
+    recognition.onresult = null;
+    recognition.onerror = null;
+    recognition.onend = null;
+
+    webVoice.get = function() {
+      return recognition;
+    }
+  }
+})();
+
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // ooooooooo.   oooooooooooo  .oooooo.o   .oooooo.   ooooo     ooo ooooooooo.     .oooooo.   oooooooooooo  .oooooo.o 
 // `888   `Y88. `888'     `8 d8P'    `Y8  d8P'  `Y8b  `888'     `8' `888   `Y88.  d8P'  `Y8b  `888'     `8 d8P'    `Y8 
@@ -57,6 +105,28 @@ resources = {
 
   loadSuccessful: function() {
     return resources.bResourceLoadSuccessful;
+  },
+
+  loadFont: function(fontName, fontPath, fontType) {
+    var fontInfo = {openTypeFont: null, loadErr: null},
+        fullURL = (fontPath || "./res/fonts") + "/" + fontName + "." + (fontType || "ttf");
+
+    fullURL = fullURL.replace("//", "/");
+
+    resources.incPendingCount();
+
+    opentype.load(fullURL, function(err, font) {
+      if (err) {
+        fontInfo.loadErr = err;
+        resources.incLoadedCount(false);
+      }
+      else {
+        fontInfo.openTypeFont = font;
+        resources.incLoadedCount(true);
+      }
+    });
+
+    return fontInfo;
   },
 
   loadImage: function(imageURL, imagePath) {
@@ -1478,8 +1548,8 @@ jb.messages = {
 //      888           888       888          888       o oo     .d8P 
 //     o888o         o888o     o888o        o888ooooood8 8""88888P'  
 // Types //////////////////////////////////////////////////////////////////////
-jb.bounds = function(top, left, width, height) {
-    this.set(top, left, width, height);
+jb.bounds = function(left, top, width, height) {
+    this.set(left, top, width, height);
     this.isBound = true;
 };
 
@@ -1494,6 +1564,13 @@ jb.bounds.prototype.draw = function(color, buffer) {
     ctxt.lineTo(this.l, this.t + this.h);
     ctxt.closePath();
     ctxt.stroke();
+};
+
+jb.bounds.prototype.clear = function() {
+  this.t = 0;
+  this.l = 0;
+  this.w = 0;
+  this.h = 0;
 };
 
 jb.bounds.prototype.set = function(left, top, width, height) {
@@ -1567,6 +1644,29 @@ jb.bounds.prototype.resizeBy = function(dw, dh) {
 
     this.halfWidth = Math.round(this.w * 0.5);
     this.halfHeight = Math.round(this.h * 0.5);
+};
+
+jb.bounds.prototype.overlap = function(other) {
+    var bInLeftRight = false,
+        bInTopBottom = false;
+
+    jb.assert(other, "jb.bounds.intersect: invalid 'other'!");
+
+    if (this.l < other.l) {
+        bInLeftRight = other.l < this.l + this.w;
+    }
+    else {
+        bInLeftRight = this.l < other.l + other.w;
+    }
+
+    if (this.t < other.t) {
+        bInTopBottom = other.t < this.t + this.h;
+    }
+    else {
+        bInTopBottom = this.t < other.t + other.h;
+    }
+
+    return bInLeftRight && bInTopBottom;
 };
 
 jb.bounds.prototype.intersect = function(other) {
@@ -1692,7 +1792,7 @@ jb.run = function(program) {
 };
 
 // Runtime Commands ////////////////////////////////////////////////////////////
-jb.gosub = function(label) {
+jb.resumeAfter = function(label) {
     var i;
 
     label = label.toUpperCase();
@@ -1873,6 +1973,9 @@ jb.timerLast = function(timerName) {
 // View ////////////////////////////////////////////////////////////////////////
 // Get canvas and resize to fit window.
 jb.NEWLINE = "`";
+jb.OPEN_TYPE_FONT_DEFAULT_VALIGN = 0.5;
+jb.OPEN_TYPE_FONT_DEFAULT_HALIGN = 0.5;
+jb.OPEN_TYPE_FONT_DEFAULT_COLOR = "white";
 jb.canvas = null;
 jb.screenBuffer = null;
 jb.screenBufferCtxt = null;
@@ -1895,6 +1998,10 @@ jb.blinkTimer = 0;
 jb.blinkClock = 0;
 jb.cellSize = {width: 0, height: 0};
 jb.globalScale = 1;
+jb.openTypeFont = null;
+jb.openTypeFontSize = 1;
+jb.openTypeFontWidthFudge = 1;
+jb.fontMetrics = new jb.bounds(0, 0, 0, 0);
 
 jb.create = function() {
     var div = document.createElement('div');
@@ -1919,15 +2026,15 @@ jb.createCanvas = function(width, height, fill) {
   var newCanvas = document.createElement('canvas'),
       newContext = newCanvas.getContext('2d');
 
-    newCanvas.width = width;
-    newCanvas.height = height;
+    newCanvas.width = width || jb.canvas.width;
+    newCanvas.height = height || jb.canvas.height;
 
     if (fill) {
       newContext.fillStyle = fill;
-      newContext.fillRect(0, 0, width, height);
+      newContext.fillRect(0, 0, newCanvas.width, newCanvas.height);
     }
     else {
-      newContext.clearRect(0, 0, width, height);
+      newContext.clearRect(0, 0, newCanvas.width, newCanvas.height);
     }
 
   return {canvas: newCanvas, context: newContext};    
@@ -1956,7 +2063,10 @@ jb.drawRoundedRect = function(ctxt, x, y, w, h, r, borderColor, fillColor, borde
 
   ctxt.strokeStyle = borderColor || "black";
   ctxt.lineWidth = borderWidth || 1;
-  ctxt.fillStyle = fillColor || "white";
+
+  if (fillColor) {
+    ctxt.fillStyle = fillColor;
+  }
 
   ctxt.beginPath();
   ctxt.moveTo(x + r, y);
@@ -1970,7 +2080,10 @@ jb.drawRoundedRect = function(ctxt, x, y, w, h, r, borderColor, fillColor, borde
   ctxt.quadraticCurveTo(x, y, x + r, y);
   ctxt.closePath();
 
-  ctxt.fill();
+  if (fillColor) {
+    ctxt.fill();
+  }
+  
   if (borderColor) {
     ctxt.stroke();
   }
@@ -2098,6 +2211,7 @@ jb.resizeFont = function() {
     jb.ctxt.textBaseline = "top";
     jb.fontInfo = "" + jb.fontSize + "px Courier";
     jb.ctxt.font = jb.fontInfo;
+    jb.openTypeFontSize = jb.fontSize;
 
     jb.rows = Math.floor(jb.canvas.height / jb.fontSize);
     jb.cellSize.width = jb.ctxt.measureText("W").width;
@@ -2126,11 +2240,90 @@ jb.cursorMove = function(dRow, dCol) {
     jb.row = Math.max(0, Math.min(jb.rows, jb.row + dRow));
     jb.col = Math.max(0, Math.min(jb.columns, jb.col + dCol));
 };
+jb.setOpenTypeFont = function(openTypeFont, size, widthFudge) {
+  jb.openTypeFont = openTypeFont ? openTypeFont.openTypeFont : null;
+  jb.openTypeFontSize = size || jb.fontSize;
+  jb.openTypeFontWidthFudge = widthFudge || 1.0;
+};
+jb.drawOpenTypeFontAt = function(ctxt, text, x, y, color, hAlign, vAlign) {
+  var path = null,
+      xFinal = 0,
+      yFinal = 0;
+
+  vAlign = vAlign || jb.OPEN_TYPE_FONT_DEFAULT_VALIGN;
+  hAlign = hAlign || jb.OPEN_TYPE_FONT_DEFAULT_HALIGN;
+  color = color || jb.OPEN_TYPE_FONT_DEFAULT_COLOR;
+
+  if (jb.openTypeFont && jb.openTypeFont && text) {
+    jb.measureOpenTypeText(text);
+
+    xFinal = x - hAlign * jb.openTypeFontMetrics.width;
+    yFinal = y - (1.0 - vAlign) * jb.openTypeFontMetrics.fontBoundingBoxAscent;
+    path = jb.openTypeFont.getPath(text, xFinal, yFinal);
+
+    ctxt.save();
+    path.fill = jb.foreColor;
+    path.stroke = jb.foreColor;
+    path.draw(ctxt);
+    ctxt.restore();
+  }
+};
+jb.openTypeFontMetrics = {
+  width: 0,
+  actualBoundingBoxAscent: 0,
+  actualBoundingBoxDescent: 0,
+  fontBoundingBoxAscent: 0,
+  fontBoundingBoxDescent: 0,
+  text: null,
+  glyphs: null,
+};
+jb.measureOpenTypeText = function(text) {
+    var ascent = 0;
+    var descent = 0;
+    var width = 0;
+    var scale = jb.openTypeFont ? jb.openTypeFontWidthFudge / jb.openTypeFont.unitsPerEm * jb.openTypeFontSize : 0;
+    var glyphs = text === jb.openTypeFontMetrics.text ? jb.openTypeFontMetrics.glyphs : jb.openTypeFont.stringToGlyphs(text);
+
+    if (scale > 0) {
+      jb.openTypeFontMetrics.text = text;
+      jb.openTypeFontMetrics.glyphs = glyphs;
+
+      for (var i = 0; i < glyphs.length; i++) {
+          var glyph = glyphs[i];
+          if (glyph.advanceWidth) {
+              width += glyph.advanceWidth * scale;
+          }
+          if (i < glyphs.length - 1) {
+              kerningValue = jb.openTypeFont.getKerningValue(glyph, glyphs[i + 1]);
+              width += kerningValue * scale;
+          }
+          ascent = Math.max(ascent, glyph.yMax);
+          descent = Math.min(descent, glyph.yMin);
+      }
+
+      jb.openTypeFontMetrics.width = width;
+      jb.openTypeFontMetrics.actualBoundingBoxAscent = ascent * scale;
+      jb.openTypeFontMetrics.actualBoundingBoxDescent = descent * scale;
+      jb.openTypeFontMetrics.fontBoundingBoxAscent = jb.openTypeFont.ascender * scale;
+      jb.openTypeFontMetrics.fontBoundingBoxDescent = jb.openTypeFont.descender * scale;
+    }
+    else {
+      jb.openTypeFontMetrics.width = 0;
+      jb.openTypeFontMetrics.actualBoundingBoxAscent = 0;
+      jb.openTypeFontMetrics.actualBoundingBoxDescent = 0;
+      jb.openTypeFontMetrics.fontBoundingBoxAscent = 0;
+      jb.openTypeFontMetrics.fontBoundingBoxDescent = 0;
+      jb.openTypeFontMetrics.text = null;
+      jb.openTypeFontMetrics.glyphs = null;
+    }
+
+    return jb.openTypeFontMetrics;
+};
 jb.print = function(text) {
     jb.printAt(text, 0, 0);
 };
 jb.printAt = function(text, newRow, newCol) {
-    var x, y, cr;
+    var x, y, cr, path;
     
     if (newRow > 0) {
         jb.row = newRow - 1;
@@ -2148,10 +2341,18 @@ jb.printAt = function(text, newRow, newCol) {
     }
 
     jb.ctxt.save();
-    jb.ctxt.fillStyle = jb.foreColor;
-    jb.ctxt.strokeStyle = jb.foreColor;
-    jb.ctxt.fillText(text, x, y);
-    jb.ctxt.strokeText(text, x, y);
+    if (jb.openTypeFont) {
+      path = jb.openTypeFont.getPath(text, x + jb.openTypeFontSize, y + jb.openTypeFontSize, jb.openTypeFontSize, true);
+      path.fill = jb.foreColor;
+      path.stroke = jb.foreColor;
+      path.draw(jb.ctxt);
+    }
+    else {
+      jb.ctxt.fillStyle = jb.foreColor;
+      jb.ctxt.strokeStyle = jb.foreColor;
+      jb.ctxt.fillText(text, x, y);
+      jb.ctxt.strokeText(text, x, y);
+    }
     jb.ctxt.restore();
     
     jb.col += text.length;
@@ -2402,6 +2603,34 @@ jb.codes = {
   46: "delete",
 };
 
+jb.KEYCODE = {
+  CANCEL: 3,
+  HELP: 6,
+  BACKSPACE: 8,
+  TAB: 9,
+  CLEAR: 12,
+  RETURN: 13,
+  ENTER: 14,
+  SHIFT: 16,
+  CONTROL: 17,
+  ALT: 18,
+  PAUSE: 19,
+  CAPSLOCK: 20,
+  ESCAPE: 27,
+  SPACE: 32,
+  PAGEUP: 33,
+  PAGEDOWN: 34,
+  END: 35,
+  HOME: 36,
+  LEFT: 37,
+  UP: 38,
+  RIGHT: 39,
+  DOWN: 40,
+  PRINTSCREEN: 44,
+  INSERT: 45,
+  DELETE: 46,
+};
+
 jb.getMouseX = function(e) {
     return Math.round((e.srcElement ? e.pageX - e.srcElement.offsetLeft : (e.target ? e.pageX - e.target.offsetLeft : e.pageX)) / jb.globalScale);
 };
@@ -2434,9 +2663,35 @@ jb.getClientPos = function(touch) {
     jb.pointInfo.srcElement = jb.canvas ? jb.canvas : null;
 };
 
-jb.tap = {bListening: false, x: -1, y: -1, done: false, isDoubleTap: false, lastTapTime: 0, touched: null};
+jb.tap = {bListening: false, x: -1, y: -1, done: false, count: 0, isDoubleTap: false, lastTapTime: 0, touched: null};
 jb.swipe = {bListening: false, startX: -1, startY: -1, lastX: -1, lastY: -1, endX: -1, endY: -1, startTime: 0, endTime: 0, swiped: [], allSwiped: [], done: false};
-
+jb.swipe.isWiderThan = function(dx) {
+  return Math.abs(jb.swipe.lastX - jb.swipe.startX) >= dx;
+};
+jb.swipe.isTallerThan = function(dy) {
+  return Math.abs(jb.swipe.lastY - jb.swipe.startY) >= dy;
+};
+jb.swipe.isBiggerThan = function(dx, dy) {
+  return jb.swipe.isTallerThan(dx) && jb.swipe.isWiderThan(dy);
+};
+jb.swipe.top = function() {
+  return Math.min(jb.swipe.startY, jb.swipe.lastY);
+};
+jb.swipe.left = function() {
+  return Math.min(jb.swipe.startX, jb.swipe.lastX);
+};
+jb.swipe.width = function() {
+  return Math.abs(jb.swipe.lastX - jb.swipe.startX);
+};
+jb.swipe.height = function() {
+  return Math.abs(jb.swipe.lastY - jb.swipe.startY);
+};
+jb.swipe.isUp = function() {
+  return jb.swipe.lastY < jb.swipe.startY;
+};
+jb.swipe.isLeft = function() {
+  return jb.swipe.lastX < jb.swipe.startX;
+};
 jb.listenForTap = function() {
     jb.resetTap();
     jb.tap.bListening = true;
@@ -2504,10 +2759,15 @@ jb.gestureStart = function() {
     if (jb.tap.bListening) {
         jb.tap.x = x;
         jb.tap.y = y;
-        jb.tap.isDoubleTap = newNow - jb.tap.lastTapTime < jb.DOUBLE_TAP_INTERVAL;
+        jb.tap.count = newNow - jb.tap.lastTapTime >= jb.DOUBLE_TAP_INTERVAL ? 1 : jb.tap.count + 1;
+        jb.tap.isDoubleTap = jb.tap.count > 1 && newNow - jb.tap.lastTapTime < jb.DOUBLE_TAP_INTERVAL;
         jb.tap.lastTapTime = newNow;
         jb.tap.touched = jb.touchables.getTouched(x, y);
         jb.tap.done = true;
+
+        if (jb.tap.isDoubleTap || jb.tap.count > 1) {
+          jb.tap.count = 0;
+        }
     }
 
     if (jb.swipe.bListening) {
@@ -5409,8 +5669,31 @@ jb.fonts = {
 // pair of characters represents a hexidecimal lookup into one of
 // 16 palettes, each of 16 colors. 00 always equals transparency.
 jb.glyphs = {
+    glyphInfo: {size: "0", name: "", glyph: null},
+
     draw: function(sizeStr, glyphName, x, y, scaleX, scaleY, anchorX, anchorY) {
         jb.glyphs.drawToContext(jb.ctxt, sizeStr, glyphName, x, y, scaleX, scaleY, anchorX, anchorY);
+    },
+
+    find: function(glyphName) {
+      var key = null;
+
+      this.glyphInfo.size = "0";
+      this.glyphInfo.name = "";
+      this.glyphInfo.glyph = null;
+
+      for (key in jb.glyphs) {
+        if (/[0-9]+[x][0-9]+/.exec(key)) {
+          if (jb.glyphs[key][glyphName]) {
+            this.glyphInfo.size = key;
+            this.glyphInfo.name = glyphName;
+            this.glyphInfo.glyph = jb.glyphs[key][glyphName];
+            break;
+          }
+        }
+      }
+
+      return this.glyphInfo.glyph ? this.glyphInfo : null;
     },
 
     // The top and left values will represent offsets from (0, 0) at

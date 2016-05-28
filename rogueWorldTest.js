@@ -126,7 +126,7 @@ jb.program = {
           tileVal = 0;
 
       // Initialize.
-      this.world = {grid: [], timer: 0, animOffset: 0, landMasses: [], highChanceDecay: 0.7, MAX_MOUNTAIN_SEEDS: 10, BASE_MOUNTAIN_CHANCE: 0.33, HIGH_MOUNTAIN_CHANCE: 0.95, MOUNTAIN_CHANCE_DECAY: 0.8};
+      this.world = {grid: [], timer: 0, animOffset: 0, landMasses: [], highChanceDecay: 0.4, MAX_MOUNTAIN_SEEDS: 10, BASE_MOUNTAIN_CHANCE: 0.33, HIGH_MOUNTAIN_CHANCE: 0.95, MOUNTAIN_CHANCE_DECAY: 0.8};
       for (iRow = 0; iRow < rows; ++iRow) {
         this.world.grid.push([]);
         for (iCol = 0; iCol < cols; ++iCol) {
@@ -268,7 +268,7 @@ jb.program = {
         }
 
         this.highChanceDecay = 0.9;
-        for (i=0; i<this.MAX_MOUNTAIN_SEEDS - this.landMasses.length; ++i) {
+        for (i=0; i<false && this.MAX_MOUNTAIN_SEEDS - this.landMasses.length; ++i) {
           y = Math.floor(Math.random() * rows);
           x = Math.floor(Math.random() * cols);
 
