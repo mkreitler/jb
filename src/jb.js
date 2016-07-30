@@ -569,13 +569,17 @@ jb.sprites = {
   },
 
   spriteSetAnchor: function(x, y) {
-    this.spriteInfo.anchor.x = x;
-    this.spriteInfo.anchor.y = y;
+    this.spriteInfo.anchor.x = x === undefined ? 0.5 : x;
+    this.spriteInfo.anchor.y = y === undefined ? 0.5 : y;
   },
 
   spriteSetScale: function(sx, sy) {
-    this.spriteInfo.scale.x = sx || 1.0;
-    this.spriteInfo.scale.y = sy || 1.0;
+    this.spriteInfo.scale.x = sx === undefined ? 1.0 : sx;
+    this.spriteInfo.scale.y = sy === undefined ? 1.0 : sy;
+
+    if (this.bounds) {
+      this.bounds.scale(sx, sy, this.spriteInfo.anchor.x, this.spriteInfo.anchor.y);
+    }
   },
 
   spriteAddState: function(newStateName, newState) {
@@ -672,36 +676,38 @@ jb.sprites = {
         bWantsRestore = bWantsScale || this.alpha !== ctxt.globalAlpha,
         curState = this.spriteInfo.state,
         dx = 0,
-        dy = 0;
+        dy = 0,
+        flipX = this.spriteInfo.scale.x / Math.abs(this.spriteInfo.scale.x),
+        flipY = this.spriteInfo.scale.y / Math.abs(this.spriteInfo.scale.y);
 
     if (this.spriteInfo.bVisible && curState && curState.frames.length > curState.frameIndex && this.spriteInfo.sheet && this.alpha > 0.0) {
-      centerX = Math.round((this.bounds.l + this.bounds.halfWidth) / this.spriteInfo.scale.x);
-      centerY = Math.round((this.bounds.t + this.bounds.halfHeight) / this.spriteInfo.scale.y);
+      centerX = Math.round(this.bounds.l + this.bounds.halfWidth);
+      centerY = Math.round(this.bounds.t + this.bounds.halfHeight);
 
-      destX = centerX - this.bounds.halfWidth;
-      destY = centerY - this.bounds.halfHeight;
+      destX = centerX - this.bounds.halfWidth * flipX;
+      destY = centerY - this.bounds.halfHeight * flipY;
 
       if (bWantsRestore) {
         ctxt.save();
-      }
-
-      if (bWantsScale) {
-        ctxt.scale(this.spriteInfo.scale.x, this.spriteInfo.scale.y);
       }
 
       ctxt.globalAlpha = this.alpha;
 
       if (typeof curState.frames[curState.frameIndex] === "number") {
         // Assume frame format of single number is 1D index into frames.
-        this.spriteInfo.sheet.draw(ctxt, destX, destY, curState.frames[curState.frameIndex]);
+        this.spriteInfo.sheet.draw(ctxt, destX, destY, curState.frames[curState.frameIndex], null, 0, this.spriteInfo.scale.x, this.spriteInfo.scale.y, this.spriteInfo.anchor.x, this.spriteInfo.anchor.y);
       }
       else {
         // Assume frame format of ordered pair, {rows, cols}, into frames.
         frameInfo = curState.frames[curState.frameIndex];
-        this.spriteInfo.sheet.draw(ctxt, destX, destY, frameInfo.row, frameInfo.col);
+        this.spriteInfo.sheet.draw(ctxt, destX, destY, frameInfo.row, frameInfo.col, 0, this.spriteInfo.scale.x, this.spriteInfo.scale.y, this.spriteInfo.anchor.x, this.spriteInfo.anchor.y);
       }
 
-      // DEBUG
+      if (bWantsRestore) {
+        ctxt.restore();
+      }
+
+      // DEBUG ////////////////////////
       // ctxt.beginPath();
       // ctxt.fillStyle = "red";
       // ctxt.fillRect(centerX - 2, centerY - 2, 4, 4);
@@ -709,10 +715,13 @@ jb.sprites = {
       // ctxt.fillRect(destX - 2, destY - 2, 4, 4);
       // ctxt.closePath();
       // ctxt.stroke();
+      // END DEBUG ////////////////////
 
-      if (bWantsRestore) {
-        ctxt.restore();
-      }
+      // DEBUG ////////////////////////
+      // if (this.bounds) {
+      //   this.bounds.draw("yellow", jb.ctxt);
+      // }
+      // END DEBUG ////////////////////
     }
   }
 };
@@ -1116,12 +1125,11 @@ jb.tileSheetObj = function(source, top, left, rows, cols, cellDx, cellDy) {
   this.cellDy = cellDy;
 };
 
-jb.tileSheetObj.prototype.draw = function(ctxt, destX, destY, cellRow, cellCol, scale, rotation) {
+jb.tileSheetObj.prototype.draw = function(ctxt, destX, destY, cellRow, cellCol, rotation, scaleX, scaleY, anchorX, anchorY) {
   var offsetX = 0,
       offsetY = 0,
       dx = 0,
-      dy = 0,
-      bCenter = Math.abs(scale ? scale : 1.0 - 1.0) > jb.EPSILON || rotation;
+      dy = 0;
 
   if (arguments.length < 5) {
     // Assume cellRow is actually a 1D array index into the sheet.
@@ -1129,11 +1137,11 @@ jb.tileSheetObj.prototype.draw = function(ctxt, destX, destY, cellRow, cellCol, 
     cellRow = Math.floor(cellRow / this.cols);
   }
 
-  if (bCenter) {
+  if (rotation || scaleX < 0 || scaleY < 0) {
     ctxt.save();
 
-    offsetX = Math.round(this.cellDx * 0.5);
-    offsetY = Math.round(this.cellDy * 0.5);
+    offsetX = Math.round(this.cellDx * (anchorX - 0.5) * scaleX / Math.abs(scaleX));
+    offsetY = Math.round(this.cellDy * (anchorY - 0.5) * scaleY / Math.abs(scaleY));
 
     dx = destX + offsetX;
     dy = destY + offsetY;
@@ -1142,46 +1150,49 @@ jb.tileSheetObj.prototype.draw = function(ctxt, destX, destY, cellRow, cellCol, 
     destX = -offsetX;
     destY = -offsetY;
 
-    if (scale !== 1.0) {
-      ctxt.scale(scale, scale);
+    if (scaleX !== 1.0 || scaleY !== 1.0) {
+      ctxt.scale(scaleX, scaleY);
+      scaleX = 1.0;
+      scaleY = 1.0;
     }
 
-    if (rotation) {
-      ctxt.rotate(rotation);
-    }
+    ctxt.rotate(rotation);
   }
 
   ctxt.drawImage(this.source,
-                 this.left + cellCol * this.cellDx,
-                 this.top + cellRow * this.cellDy,
+                 this.left + cellCol * this.cellDx - 0.25 / scaleX, // 0.25 / scaleX -> HACK to prevent anti-aliasing from adding extra pixels when drawing a scaled sprite.
+                 this.top + cellRow * this.cellDy + 0.25 / scaleY, // 0.25 / scaleY -> HACK to prevent anti-aliasing from adding extra pixels when drawing a scaled sprite.
                  this.cellDx,
                  this.cellDy,
                  destX,
                  destY,
-                 this.cellDx,
-                 this.cellDy);
+                 Math.round(this.cellDx * scaleX),
+                 Math.round(this.cellDy * scaleY));
 
-  if (bCenter) {
+  if (rotation) {
     ctxt.restore();
   }
 };
 
-jb.tileSheetObj.prototype.drawTile = function(ctxt, left, top, destRow, destCol, cellRow, cellCol) {
+jb.tileSheetObj.prototype.drawTile = function(ctxt, left, top, destRow, destCol, cellRow, cellCol, scaleX, scaleY) {
   if (arguments.length < 7) {
     // Assume cellRow is actually a 1D array index into the sheet.
     cellCol = cellRow % this.cols;
     cellRow = Math.floor(cellRow / this.cols);
   }
 
+  scaleX = scaleX || 1;
+  scaleY = scaleY || 1;
+
   ctxt.drawImage(this.source,
                  this.left + cellCol * this.cellDx,
                  this.top + cellRow * this.cellDy,
                  this.cellDx,
                  this.cellDy,
-                 left + destCol * this.cellDx,
-                 top + destRow * this.cellDy,
-                 this.cellDx,
-                 this.cellDy);
+                 left + destCol * this.cellDx * scaleX,
+                 top + destRow * this.cellDy * scaleY,
+                 this.cellDx * scaleX,
+                 this.cellDy * scaleY);
 }
 
 jb.tileSheetObj.prototype.getCellWidth = function() {
@@ -1608,14 +1619,24 @@ jb.bounds.prototype.copy = function(dest) {
     dest.halfHeight = this.halfHeight;
 };
 
-jb.bounds.prototype.scale = function(sx, sy) {
+jb.bounds.prototype.scale = function(sx, sy, anchorX, anchorY) {
     var xScale = sx || 1,
-        yScale = sy || xScale;
+        yScale = sy || xScale,
+        anchorPoint;
 
-    this.t *= yScale;
-    this.l *= xScale;
-    this.w *= xScale;
-    this.h *= yScale;
+    xScale = Math.abs(xScale);
+    yScale = Math.abs(yScale);
+    anchorX = anchorX === undefined ? 0.5 : anchorX;
+    anchorY = anchorY === undefined ? 0.5 : anchorY;
+
+    anchorPoint = this.t + this.h * anchorY;
+    this.h = Math.round(this.h * yScale);
+    this.t = Math.round(anchorPoint - this.h * anchorY);
+
+    anchorPoint = this.l + this.w * anchorX;
+    this.w = Math.round(this.w * xScale);
+    this.l = Math.round(anchorPoint - this.w * anchorX);
+
     this.halfWidth = Math.round(this.w * 0.5);
     this.halfHeight = Math.round(this.h * 0.5);
 };
@@ -2047,6 +2068,18 @@ jb.drawImage = function(ctxt, image, xa, ya, anchorX, anchorY) {
       ctxt.drawImage(image, x, y);
     }
 };
+jb.relXtoScreenX = function(relX) {
+  return Math.round(jb.canvas.width * relX);
+};
+jb.relYtoScreenY = function(relY) {
+  return Math.round(jb.canvas.height * relY);
+};
+jb.screenXtoRelX = function(screenX) {
+  return screenX / jb.canvas.width;
+};
+jb.screenYtoRelY = function(screenY) {
+  return screenY / jb.canvas.height;
+};
 jb.drawImageNormalized = function(image, nx, ny, anchorX, anchorY) {
     var x = nx * jb.canvas.width,
         y = ny * jb.canvas.height,
@@ -2245,14 +2278,13 @@ jb.setOpenTypeFont = function(openTypeFont, size, widthFudge) {
   jb.openTypeFontSize = size || jb.fontSize;
   jb.openTypeFontWidthFudge = widthFudge || 1.0;
 };
-jb.drawOpenTypeFontAt = function(ctxt, text, x, y, color, hAlign, vAlign) {
+jb.drawOpenTypeFontAt = function(ctxt, text, x, y, strokeColor, fillColor, hAlign, vAlign) {
   var path = null,
       xFinal = 0,
       yFinal = 0;
 
   vAlign = vAlign || jb.OPEN_TYPE_FONT_DEFAULT_VALIGN;
   hAlign = hAlign || jb.OPEN_TYPE_FONT_DEFAULT_HALIGN;
-  color = color || jb.OPEN_TYPE_FONT_DEFAULT_COLOR;
 
   if (jb.openTypeFont && jb.openTypeFont && text) {
     jb.measureOpenTypeText(text);
@@ -2262,8 +2294,8 @@ jb.drawOpenTypeFontAt = function(ctxt, text, x, y, color, hAlign, vAlign) {
     path = jb.openTypeFont.getPath(text, xFinal, yFinal);
 
     ctxt.save();
-    path.fill = jb.foreColor;
-    path.stroke = jb.foreColor;
+    path.fill = fillColor;
+    path.stroke = strokeColor;
     path.draw(ctxt);
     ctxt.restore();
   }
@@ -7075,6 +7107,322 @@ jb.glyphs = {
          "rgba(0, 255, 255, 255)", "rgba(255, 0, 255, 255)", "rgba(128, 0, 0, 255)", "rgba(0, 128, 0, 255)",
          "rgba(0, 0, 128, 255)", "rgba(128, 128, 0, 255)", "rgba(0, 128, 128, 255)", "rgba(128, 0, 128, 255)"],
     ]
+};
+
+//////////////////////////////////////////////////////////////////////////////////////////////
+// oooooooooooo  oooooooooooo   .oooooo.    oooo                         oooo                 
+// `888'     `8 d'""""""d888'  d8P'  `Y8b   `888                         `888                 
+//  888               .888P   888            888  oooo    ooo oo.ooooo.   888 .oo.    .oooo.o 
+//  888oooo8         d888'    888            888   `88.  .8'   888' `88b  888P"Y88b  d88(  "8 
+//  888    "       .888P      888     ooooo  888    `88..8'    888   888  888   888  `"Y88b.  
+//  888       o   d888'    .P `88.    .88'   888     `888'     888   888  888   888  o.  )88b 
+// o888ooooood8 .8888888888P   `Y8bood8P'   o888o     .8'      888bod8P' o888o o888o 8""888P' 
+//                                                .o..P'       888                            
+//                                                `Y8P'       o888o                           
+//////////////////////////////////////////////////////////////////////////////////////////////
+
+/**
+ *  Allows programmers to define views using preset shapes called "glyphs". These are
+ *  meant to be an approximation of Commodore 64 keyboard graphics.
+ *
+ *  Glyphs render into a bitmap using two structures: shape data, and color 
+ *
+ *  ShapeData consists of a 1D array of strings. Each string consists of n
+ *  elements, each 2 chars. The first char represents the glyph as a direct
+ *  lookup into the glyphMap (for example: '|'). The second char must be a
+ *  number from 0 to 3 representing the number of 90 degree rotations to
+ *  apply to the glyph. All rotations take place at the center of the cell.
+ *
+ *  ColorData consists of a 1D array of paired strings. Each string consists
+ *  of n elements, each 2 chars. The first string in the pair represents
+ *  background colors, with the first char in each cell referencing a color
+ *  palette, and the next character representing the color within that
+ *  palette. The second string represents foreground colors, using the same
+ *  2 character encoding scheme to look up colors from predefined palettes.
+ *  In all cases, color value 0 represents "no color" -- or full alpha.
+ */
+jb.EZglyphs = {
+  // Class Definition ///////////////////////////////////////////////////////
+  EMPTY_GLYPH: '.',
+
+  // For all glyphMap elements:
+  // gfx = graphics context into which to draw
+  // cs = cellSize,
+  // hcs = half cellSize
+  GLYPH_MAP: {'.': null, // EMPTY_GLYPH
+              '|': { draw: function(gfx, cs, hcs) {
+                gfx.beginPath();
+                gfx.moveTo(0, -hcs);
+                gfx.lineTo(0, hcs);
+                gfx.stroke();
+              }},
+              '-': { draw: function(gfx, cs, hcs) {
+                gfx.beginPath();
+                gfx.moveTo(-hcs, 0);
+                gfx.lineTo(hcs, 0);
+                gfx.stroke();
+              }},
+              '_': { draw: function(gfx, cs, hcs) {
+                gfx.beginPath();
+                gfx.moveTo(-hcs, hcs);
+                gfx.lineTo(hcs, hcs);
+                gfx.stroke();
+              }},
+              '+': { draw: function(gfx, cs, hcs) {
+                gfx.beginPath();
+                gfx.moveTo(0, -hcs);
+                gfx.lineTo(0, hcs);
+                gfx.moveTo(-hcs, 0);
+                gfx.lineTo(hcs, 0);
+                gfx.stroke();
+              }},
+              'r': { draw: function(gfx, cs, hcs) {
+                gfx.beginPath();
+                gfx.moveTo(0, hcs);
+                gfx.lineTo(0, 0);
+                gfx.lineTo(hcs, 0);
+                gfx.stroke();
+              }},
+              '/': { draw: function(gfx, cs, hcs) {
+                gfx.beginPath();
+                gfx.moveTo(hcs, -hcs);
+                gfx.lineTo(-hcs, hcs);
+                gfx.stroke();
+              }},
+              'l': { draw: function(gfx, cs, hcs) {
+                gfx.beginPath();
+                gfx.moveTo(-hcs, -hcs);
+                gfx.lineTo(-hcs, hcs);
+                gfx.stroke();
+              }},
+              '[': { draw: function(gfx, cs, hcs) {
+                gfx.beginPath();
+                gfx.moveTo(hcs, hcs);
+                gfx.lineTo(0, hcs),
+                gfx.lineTo(0, -hcs);
+                gfx.lineTo( hcs, -hcs);
+                gfx.stroke();
+              }},
+              'v': { draw: function(gfx, cs, hcs) {
+                gfx.beginPath();
+                gfx.moveTo(-hcs, 0);
+                gfx.lineTo(0, hcs);
+                gfx.lineTo(hcs, 0);
+                gfx.stroke();
+              }},
+              'L': { draw: function(gfx, cs, hcs) {
+                gfx.beginPath();
+                gfx.moveTo(-hcs, -hcs);
+                gfx.lineTo(-hcs, hcs);
+                gfx.lineTo(hcs, hcs);
+                gfx.stroke();
+              }},
+              'O': { draw: function(gfx, cs, hcs) {
+                gfx.beginPath();
+                gfx.arc(0, 0, hcs, 0, 2 * Math.PI, true);
+                gfx.stroke();
+              }},
+              'D': { draw: function(gfx, cs, hcs) {
+                gfx.beginPath();
+                gfx.arc(0, 0, hcs, -Math.PI / 2, Math.PI / 2, false);
+               gfx.stroke();
+              }},
+              'c': { draw: function(gfx, cs, hcs) {
+                gfx.beginPath();
+                gfx.arc(hcs, hcs, hcs, Math.PI / 2, 3 * Math.PI / 2, false);
+                gfx.stroke();
+              }}
+            },
+
+  DEFAULT_PALETTE: [
+    "#FF00FF", // Should never see this color, as '0' means "full alpha"
+    "#000000",
+    "#888888",
+    "#FFFFFF",
+    "#FF0000",
+    "#00FF00",
+    "#0000FF",
+    "#FFFF00",
+    "#FF8800",
+    "#880088",
+    "#00FFFF",
+  ],
+
+  MONOCHROME_PALETTE: [
+    "#FF00FF", // Should never see this color, as '0' means "full alpha"
+    "#000000",
+    "#222222",
+    "#444444",
+    "#666666",
+    "#888888",
+    "#AAAAAA",
+    "#CCCCCC",
+    "#EEEEEE",
+    "#FFFFFF"
+  ],
+
+  TRANSPARENT: "transparent",
+
+  // Instance Definition ////////////////////////////////////////////////////
+  ROW_SIZE: 1,
+  COL_SIZE: 2,
+  cellSize: 16,
+  shapeData: null,
+  colorData: null,
+  backFill: null,
+  lineWidth: 1,
+
+  generate: function(cellSize, shapeData, colorData, lineWidth, backFill, palettes) {
+    this.setCellSize(cellSize);
+    this.setShapeData(shapeData);
+    this.setColorData(colorData);
+    this.setLineWidth(lineWidth);
+    this.setBackFill(backFill);
+    this.setPalettes(palettes || this.DEFAULT_PALLETE);
+
+    return this.generateImage();
+  },
+
+  generateImage: function() {
+    var w, h, newCanvas, newImage;
+
+    jb.assert(this.shapeData &&
+              this.shapeData.length > 0 &&
+              this.shapeData[0] &&
+              this.shapeData[0].length >= this.COL_SIZE,
+              "Invalid EZglyph shape data!");
+
+    w = this.shapeData[0].length / this.COL_SIZE * this.cellSize;
+    h = this.shapeData.length / this.ROW_SIZE * this.cellSize;
+    newCanvas = jb.createCanvas(w, h);
+
+    this.draw(newCanvas.context);
+
+    return newCanvas.canvas;
+  },
+
+  setCellSize: function(newSize) {
+    this.cellSize = Math.max(newSize, 1);
+  },
+
+  setShapeData: function(newData) {
+    this.shapeData = newData ? newData : null;
+  },
+
+  setColorData: function(newData) {
+    this.colorData = newData ? newData : null;
+  },
+
+  setLineWidth: function(newWidth) {
+    this.lineWidth = newWidth ? newWidth : 1;
+  },
+
+  setBackFill: function(newFill) {
+    this.backFill = newFill ? newFill : jb.EZglyphs.TRANSPARENT;
+  },
+
+  setPalettes: function(newPalettes) {
+    if (newPalettes) {
+      this.palettes = newPalettes;
+    }
+    else {
+      this.palettes = [];
+      this.palettes.push(jb.EZglyphs.DEFAULT_PALETTE);
+      this.palettes.push(jb.EZglyphs.MONOCHROME_PALETTE);
+    }
+  },
+
+  draw: function(gfx, x0, y0) {
+    var x, y, glyph, rot, bc, fc, pal, bBackColors, iRow, iCol, color;
+
+    x0 = x0 || 0;
+    y0 = y0 || 0;
+
+    if (gfx && this.shapeData && this.colorData) {
+      jb.assert(this.shapeData.length === this.colorData.foreground.length &&
+                this.shapeData.length > 0 &&
+                this.shapeData[0].length === this.colorData.foreground[0].length,
+                "Invalid shape or foreground color data!");
+
+      bBackColors = Boolean(this.colorData.background) && this.colorData.background.length > 0;
+
+      if (bBackColors) {
+        jb.assert(this.shapeData.length === this.colorData.background.length &&
+                  this.shapeData.length > 0 &&
+                  this.shapeData[0].length === this.colorData.background[0].length,
+                  "Invalid shape or background color data!");
+      }
+
+      gfx.save();
+
+      // Empty the space into which we'll draw the shape.
+      if (this.backFill === jb.EZglyphs.TRANSPARENT) {
+        gfx.clearRect(0,
+                      0,
+                      this.shapeData[0].length / this.COL_SIZE * this.cellSize,
+                      this.shapeData.length / this.ROW_SIZE * this.cellSize);
+      }
+      else {
+        gfx.fillStyle = this.backFill;
+        gfx.fillRect(0,
+                     0,
+                     this.shapeData[0].length / this.COL_SIZE * this.cellSize,
+                     this.shapeData.length / this.ROW_SIZE * this.cellSize);
+      }
+
+      gfx.lineWidth = this.lineWidth;
+
+      for (iRow=0; iRow<this.shapeData.length; iRow+=this.ROW_SIZE) {
+        gfx.save();
+        y = y0 + this.cellSize * iRow / this.ROW_SIZE;
+
+        for (iCol=0; iCol<this.shapeData[0].length; iCol+=this.COL_SIZE) {
+          x = x0 + this.cellSize * iCol / this.COL_SIZE;
+          glyph = jb.EZglyphs.GLYPH_MAP[this.shapeData[iRow].charAt(iCol)];
+          rot = parseInt(this.shapeData[iRow].charAt(iCol + 1));
+
+          if (glyph) {
+            gfx.translate(x, y);
+
+            // Draw the cell background, if any.
+            if (bBackColors) {
+              pal = parseInt(this.colorData.background[iRow].charAt(iCol));
+              bc = parseInt(this.colorData.background[iRow].charAt(iCol + 1));
+
+              if (bc > 0 && pal < this.palettes.length && bc < this.palettes[pal].length) {
+                gfx.fillStyle = this.palettes[pal][bc];
+                gfx.fillRect(0, 0, this.cellSize, this.cellSize);
+              }
+            }              
+
+            // Draw the cell foreground.
+            if (rot !== NaN && glyph) {
+              pal = this.colorData.foreground[iRow].charAt(iCol);
+              fc = this.colorData.foreground[iRow].charAt(iCol + 1);
+
+              if (fc > 0 && pal < this.palettes.length && fc < this.palettes[pal].length) {
+                color = this.palettes[pal][fc];
+                gfx.strokeStyle = color;
+                gfx.translate(this.cellSize / 2, this.cellSize / 2);
+
+                if (rot) {
+                  gfx.rotate(rot * 2 * Math.PI / 4);
+                }
+
+                glyph.draw(gfx, this.cellSize, this.cellSize / 2);
+
+                gfx.setTransform(1, 0, 0, 1, 0, 0);
+              }
+            }
+          }
+        }
+
+        gfx.restore();
+      }
+
+      gfx.restore();
+    }
+  }
 };
 
 ///////////////////////////////////////////////////////////////////////////////

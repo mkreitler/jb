@@ -18,7 +18,9 @@ jb.program = {
     },
 
     do_titleScreen: function() {
-      jb.drawOpenTypeFontAt(jb.ctxt, "STATION INVASION", jb.canvas.width / 2, jb.canvas.height / 2, "yellow", 0.0, 1.0);
+      jb.backColor = "gray";
+      jb.clear();
+      jb.drawOpenTypeFontAt(jb.ctxt, "Star Zoo", jb.canvas.width / 2, jb.canvas.height / 2, "yellow", "black", 0.5, 1.0);
 //      this.sfFont.openTypeFont.drawMetrics(jb.ctxt, "Station Invasion", jb.canvas.width / 2, jb.canvas.height / 2, jb.openTypeFontSize);
 
       jb.until(jb.tap.done);
