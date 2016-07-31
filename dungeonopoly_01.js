@@ -21,6 +21,7 @@ jb.program = {
     testChoice: null,
 
     start: function() {
+      jb.resize(854, 480);
       this.titleFont = resources.loadFont("Fipps-Regular", "./res_light/fonts", "otf");
       this.textFont = resources.loadFont("alagard", "./res_light/fonts", "ttf");
       this.spriteImages["dungeonTiles"] = resources.loadImage("oryx_16bit_fantasy_world_trans.png", "./res_light/fantasy art/");
@@ -76,7 +77,7 @@ jb.program = {
     end: function() {
       jb.print("Chose " + this.testChoice + "`");
       jb.print("Screen Size: " + jb.canvas.width + "x" + jb.canvas.height + "`");
-      
+
       jb.end();
     },
 
