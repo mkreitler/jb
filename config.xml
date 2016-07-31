@@ -13,6 +13,8 @@
   </author>
 
   <preference name="phonegap-version" value="cli-6.3.0" />
+  <preference name="orientation" value="landscape" />
+  <preference name="fullscreen" value="true" />
 
   <gap:platforms>
     <gap:platform name="android" minVersion="2.1" />
@@ -22,9 +24,4 @@
   </gap:platforms>
 
   <icon src="icon.png" gap:role="default" />
-
-  <!-- SET TO PORTRAIT -->
-
-  <preference name="orientation" value="landscape" />
-
 </widget>
