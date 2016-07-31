@@ -4,14 +4,14 @@
   id="com.freegamersjournal.dungeonopolyTest"
   version= "1.0.0">
 
-  <name>CraftyJs starmelt tutorial</name>
-  <description>CraftyJs Game</description>
+  <name>Dungeonopoly</name>
+  <description>Dungeonopoly Test Bed</description>
 
   <author href="https://github.com/mkreitler"
     email="mkreitler@hotmail.com">
     Tim Kim
   </author>
-  
+
   <preference name="phonegap-version" value="cli-6.3.0" />
 
   <gap:platforms>
