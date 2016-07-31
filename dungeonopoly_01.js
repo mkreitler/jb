@@ -21,10 +21,10 @@ jb.program = {
     testChoice: null,
 
     start: function() {
-      this.titleFont = resources.loadFont("Fipps-Regular", "./res/fonts", "otf");
-      this.textFont = resources.loadFont("alagard", "./res/fonts", "ttf");
-      this.spriteImages["dungeonTiles"] = resources.loadImage("oryx_16bit_fantasy_world_trans.png", "./res/fantasy art/");
-      this.spriteImages["characterTiles"] = resources.loadImage("oryx_16bit_fantasy_creatures_trans.png", "./res/fantasy art/");
+      this.titleFont = resources.loadFont("Fipps-Regular", "./res_light/fonts", "otf");
+      this.textFont = resources.loadFont("alagard", "./res_light/fonts", "ttf");
+      this.spriteImages["dungeonTiles"] = resources.loadImage("oryx_16bit_fantasy_world_trans.png", "./res_light/fantasy art/");
+      this.spriteImages["characterTiles"] = resources.loadImage("oryx_16bit_fantasy_creatures_trans.png", "./res_light/fantasy art/");
     },
 
     do_waitForResources: function() {
