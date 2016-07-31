@@ -75,6 +75,8 @@ jb.program = {
 
     end: function() {
       jb.print("Chose " + this.testChoice + "`");
+      jb.print("Screen Size: " + jb.canvas.width + "x" + jb.canvas.height + "`");
+      
       jb.end();
     },
 
