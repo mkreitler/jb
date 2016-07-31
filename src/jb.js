@@ -708,19 +708,19 @@ jb.sprites = {
       }
 
       // DEBUG ////////////////////////
-      // ctxt.beginPath();
-      // ctxt.fillStyle = "red";
-      // ctxt.fillRect(centerX - 2, centerY - 2, 4, 4);
-      // ctxt.fillStyle = "blue";
-      // ctxt.fillRect(destX - 2, destY - 2, 4, 4);
-      // ctxt.closePath();
-      // ctxt.stroke();
+      ctxt.beginPath();
+      ctxt.fillStyle = "red";
+      ctxt.fillRect(centerX - 2, centerY - 2, 4, 4);
+      ctxt.fillStyle = "blue";
+      ctxt.fillRect(destX - 2, destY - 2, 4, 4);
+      ctxt.closePath();
+      ctxt.stroke();
       // END DEBUG ////////////////////
 
       // DEBUG ////////////////////////
-      // if (this.bounds) {
-      //   this.bounds.draw("yellow", jb.ctxt);
-      // }
+      if (this.bounds) {
+        this.bounds.draw("yellow", jb.ctxt);
+      }
       // END DEBUG ////////////////////
     }
   }
