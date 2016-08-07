@@ -21,7 +21,7 @@ jb.program = {
     testChoice: null,
 
     start: function() {
-      jb.resize(854, 480);
+      // jb.resize(854, 480);
       jb.setForeColor("white");
       this.titleFont = resources.loadFont("Fipps-Regular", "./res_light/fonts", "otf");
       this.textFont = resources.loadFont("alagard", "./res_light/fonts", "ttf");
