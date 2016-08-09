@@ -2029,8 +2029,8 @@ jb.create = function() {
     var div = document.createElement('div');
     var ratio = window.devicePixelRatio || 1;
 
-    jb.screen.width = screen.width * ratio;
-    jb.screen.height = screen.height * ratio;
+    jb.screen.width = (window.innerWidth  || document.body.clientWidth) * ratio;
+    jb.screen.height = (window.innerHeight || document.body.clientHeight) * ratio;
 
     div.align = "center";
 
