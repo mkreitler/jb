@@ -2023,9 +2023,15 @@ jb.openTypeFont = null;
 jb.openTypeFontSize = 1;
 jb.openTypeFontWidthFudge = 1;
 jb.fontMetrics = new jb.bounds(0, 0, 0, 0);
+jb.screen = {width: screen.width, height: screen.height};
 
 jb.create = function() {
     var div = document.createElement('div');
+    var ratio = window.devicePixelRatio || 1;
+
+    jb.screen.width *= ratio;
+    jb.screen.height *= ratio;
+
     div.align = "center";
 
     jb.canvas = document.createElement('canvas');
