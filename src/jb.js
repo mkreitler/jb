@@ -2031,6 +2031,7 @@ jb.createCanvas = function(width, height, fill) {
 
     if (fill) {
       newContext.fillStyle = fill;
+      jb.backColor = fill;
       newContext.fillRect(0, 0, newCanvas.width, newCanvas.height);
     }
     else {
@@ -2214,7 +2215,8 @@ jb.resizeFont = function() {
     jb.openTypeFontSize = jb.fontSize;
 
     jb.rows = Math.floor(jb.canvas.height / jb.fontSize);
-    jb.cellSize.width = jb.ctxt.measureText("W").width;
+//    jb.cellSize.width = jb.ctxt.measureText("W").width;
+    jb.cellSize.width = Math.floor(jb.canvas.width / jb.columns) + 1;
     jb.cellSize.height = Math.floor(jb.fontSize) + 1;
 };
 jb.clear = function() {
@@ -2252,7 +2254,7 @@ jb.drawOpenTypeFontAt = function(ctxt, text, x, y, color, hAlign, vAlign) {
 
   vAlign = vAlign || jb.OPEN_TYPE_FONT_DEFAULT_VALIGN;
   hAlign = hAlign || jb.OPEN_TYPE_FONT_DEFAULT_HALIGN;
-  color = color || jb.OPEN_TYPE_FONT_DEFAULT_COLOR;
+  color = color || jb.foreColor || jb.OPEN_TYPE_FONT_DEFAULT_COLOR;
 
   if (jb.openTypeFont && jb.openTypeFont && text) {
     jb.measureOpenTypeText(text);
@@ -2262,8 +2264,8 @@ jb.drawOpenTypeFontAt = function(ctxt, text, x, y, color, hAlign, vAlign) {
     path = jb.openTypeFont.getPath(text, xFinal, yFinal);
 
     ctxt.save();
-    path.fill = jb.foreColor;
-    path.stroke = jb.foreColor;
+    path.fill = color;
+    path.stroke = color;
     path.draw(ctxt);
     ctxt.restore();
   }
@@ -3844,23 +3846,43 @@ jb.fonts = {
             ],
             images: {}
         },
-        "'": {
+        "<": {
             data: ["................",
+                   "..........0000..",
+                   ".........0000...",
+                   "........00..0...",
                    ".......00.......",
-                   "......0000......",
-                   "......0000......",
-                   ".....000........",
-                   "................",
-                   "................",
-                   "................",
-                   "................",
-                   "................",
-                   "................",
-                   "................",
-                   "................",
-                   "................",
-                   "................",
-                   "................",
+                   "......00........",
+                   ".....00.........",
+                   "....00..........",
+                   "...00...........",
+                   "....00..........",
+                   ".....00.........",
+                   "......00........",
+                   ".......00.......",
+                   "........00..0...",
+                   ".........0000...",
+                   "..........0000..",
+            ],
+            images: {}
+        },
+        ">": {
+            data: ["................",
+                   "..0000..........",
+                   "...0000.........",
+                   "...0..00........",
+                   ".......00.......",
+                   "........00......",
+                   ".........00.....",
+                   "..........00....",
+                   "...........00...",
+                   "..........00....",
+                   ".........00.....",
+                   "........00......",
+                   ".......00.......",
+                   "...0..00........",
+                   "...0000.........",
+                   "..0000..........",
             ],
             images: {}
         },
